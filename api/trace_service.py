@@ -107,12 +107,20 @@ def _ray_to_polyline(ray, tfrms, extend_parallel_back=50.0, extend_to_focus=True
 
 
 def optical_stack_to_surf_data(surfaces):
-    """Convert frontend surfaces to rayoptics surf_data_list [curvature, thickness, n, v]."""
+    """
+    Convert frontend surfaces to rayoptics surf_data_list [curvature, thickness, n, v].
+
+    Each row provides 'n' (refractive index) for the medium after that surface.
+    At each interface, Snell's Law (n₁sinθ₁ = n₂sinθ₂) is applied using:
+    - n₁ = n from the previous row (medium before the surface)
+    - n₂ = n from the current row (medium after the surface)
+    Object space is assumed n=1 (air).
+    """
     surf_data_list = []
     for s in surfaces:
         r = float(s.get("radius", 0) or 0)
         t = float(s.get("thickness", 0) or 0)
-        n = float(s.get("refractiveIndex", 1) or 1)
+        n = float(s.get("n", s.get("refractiveIndex", 1)) or 1)
         curvature = 1.0 / r if r != 0 else 0.0
         v = 64.2 if (s.get("type") == "Glass" and n > 1.01) else 0.0
         surf_data_list.append([curvature, t, n, v])

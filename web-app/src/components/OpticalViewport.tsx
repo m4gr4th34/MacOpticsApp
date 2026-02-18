@@ -10,52 +10,6 @@ const RAY_COLORS = ['#22D3EE', '#F97316', '#22C55E'] as const
 type RayPoint = { x: number; y: number }
 type Ray = { points: RayPoint[]; color: string }
 
-// Simple lens geometry: two arcs for a singlet (fallback when no backend data)
-function getLensPath(
-  x1: number,
-  x2: number,
-  radius1: number,
-  radius2: number,
-  semiHeight: number,
-  viewHeight: number,
-  scale: number,
-  xOffset: number
-): string {
-  const cy = viewHeight / 2
-  const toView = (x: number, y: number) => `${x * scale + xOffset},${-y * scale + cy}`
-
-  const n = 24
-  const pts: string[] = []
-
-  if (Math.abs(radius1) > 0.1) {
-    const r1 = radius1
-    for (let i = 0; i <= n; i++) {
-      const theta = (i / n) * Math.PI - Math.PI / 2
-      const y = Math.sin(theta) * semiHeight
-      const z = r1 - Math.sqrt(Math.max(0, r1 * r1 - y * y))
-      pts.push(toView(x1 + z, y))
-    }
-  } else {
-    pts.push(toView(x1, semiHeight))
-    pts.push(toView(x1, -semiHeight))
-  }
-
-  if (Math.abs(radius2) > 0.1) {
-    const r2 = -radius2
-    for (let i = n; i >= 0; i--) {
-      const theta = (i / n) * Math.PI - Math.PI / 2
-      const y = Math.sin(theta) * semiHeight
-      const z = r2 - Math.sqrt(Math.max(0, r2 * r2 - y * y))
-      pts.push(toView(x2 - z, y))
-    }
-  } else {
-    pts.push(toView(x2, -semiHeight))
-    pts.push(toView(x2, semiHeight))
-  }
-
-  return `M ${pts.join(' L ')} Z`
-}
-
 // Paraxial fallback rays when backend unavailable
 function generateRays(
   numRays: number,
@@ -83,46 +37,72 @@ function generateRays(
   return rays
 }
 
-/** Compute scale and offset to map optical (z,y) mm to SVG pixels */
+/** Compute cumulative Z positions for surfaces (mm) */
+function computeCumulativeZ(surfaces: { thickness: number }[]): number[] {
+  const z: number[] = []
+  let cum = 0
+  for (let i = 0; i < surfaces.length; i++) {
+    z.push(cum)
+    cum += surfaces[i].thickness ?? 0
+  }
+  return z
+}
+
+/**
+ * Auto-Zoom: compute scale and offset so the entire optical system is centered and visible.
+ * Uses Z_total (total length) and D_max (max diameter) from surfaces.
+ * Recomputes whenever surfaces or thicknesses change.
+ */
 function computeViewTransform(
   traceResult: TraceResult | null,
+  surfaces: { thickness: number; diameter?: number }[],
+  epd: number,
   viewWidth: number,
   viewHeight: number
 ): { scale: number; xOffset: number; cy: number } {
   const padding = 40
   const cy = viewHeight / 2
 
-  if (!traceResult?.rays?.length && !traceResult?.surfaces?.length) {
-    return { scale: 1.8, xOffset: 60, cy }
+  // Z_total = total length of system (sum of all thicknesses)
+  const zTotal = surfaces.reduce((sum, s) => sum + (s.thickness ?? 0), 0)
+  // D_max = maximum diameter across all surfaces and entrance pupil
+  const dMax = surfaces.length
+    ? Math.max(epd, ...surfaces.map((s) => s.diameter ?? epd))
+    : epd
+  const yExtent = Math.max(dMax / 2, 5)
+
+  let zMin = 0
+  let zMax = Math.max(zTotal, 50)
+
+  if (surfaces.length) {
+    zMin = -Math.max(30, zTotal * 0.15)
+    zMax = zTotal + Math.max(50, zTotal * 0.2)
   }
 
-  let zMin = Infinity
-  let zMax = -Infinity
-  let yExtent = 5
-
-  const scan = (z: number, y: number) => {
-    zMin = Math.min(zMin, z)
-    zMax = Math.max(zMax, z)
-    yExtent = Math.max(yExtent, Math.abs(y))
+  let effectiveYExtent = yExtent
+  if (traceResult?.rays?.length || traceResult?.surfaces?.length) {
+    const scan = (z: number, y: number) => {
+      zMin = Math.min(zMin, z)
+      zMax = Math.max(zMax, z)
+      effectiveYExtent = Math.max(effectiveYExtent, Math.abs(y))
+    }
+    for (const ray of traceResult.rays ?? []) {
+      for (const [z, y] of ray) scan(z, y)
+    }
+    for (const surf of traceResult.surfaces ?? []) {
+      for (const [z, y] of surf) scan(z, y)
+    }
+    if (traceResult.focusZ != null) scan(traceResult.focusZ, 0)
   }
 
-  for (const ray of traceResult.rays ?? []) {
-    for (const [z, y] of ray) scan(z, y)
-  }
-  for (const surf of traceResult.surfaces ?? []) {
-    for (const [z, y] of surf) scan(z, y)
-  }
-  if (traceResult.focusZ != null) scan(traceResult.focusZ, 0)
-
-  if (zMin >= zMax) return { scale: 1.8, xOffset: 60, cy }
-
-  const zRange = zMax - zMin + 20
-  const yRange = 2 * yExtent + 10
+  const zRange = zMax - zMin
+  const yRange = 2 * effectiveYExtent + 10
   const scale = Math.min(
     (viewWidth - 2 * padding) / zRange,
     (viewHeight - 2 * padding) / yRange
   ) * 0.9
-  const xOffset = padding - zMin * scale
+  const zCenter = (zMin + zMax) / 2
+  const xOffset = viewWidth / 2 - zCenter * scale
 
   return { scale, xOffset, cy }
 }
@@ -194,42 +174,89 @@ export function OpticalViewport({
 
   const viewWidth = 640
   const viewHeight = 320
+  const surfaces = systemState.surfaces
+  const epd = systemState.entrancePupilDiameter ?? 10
+  const semiHeight = epd / 2
+
   const { scale, xOffset, cy } = useMemo(
-    () => computeViewTransform(traceResult, viewWidth, viewHeight),
-    [traceResult, viewWidth, viewHeight]
+    () =>
+      computeViewTransform(
+        traceResult,
+        surfaces,
+        epd,
+        viewWidth,
+        viewHeight
+      ),
+    [traceResult, surfaces, epd, viewWidth, viewHeight]
   )
 
-  const s0 = systemState.surfaces[0]
-  const s1 = systemState.surfaces[1]
-  const lensX1 = 40
-  const lensX2 = lensX1 + (s0?.thickness ?? 5)
-  const focusX = lensX2 + (s1?.thickness ?? 95) * 0.7
-  const semiHeight = (systemState.entrancePupilDiameter ?? 10) / 2
-  const radius1 = s0?.radius ?? 100
-  const radius2 = s1?.radius ?? -100
+  const zPositions = useMemo(() => computeCumulativeZ(surfaces), [surfaces])
+  const totalLength = zPositions.length ? zPositions[zPositions.length - 1] + (surfaces[surfaces.length - 1]?.thickness ?? 0) : 0
+  const focusX = totalLength * 0.7
+  const lensX1 = zPositions[0] ?? 0
+  const lensX2 = surfaces[0] ? (zPositions[0] ?? 0) + (surfaces[0].thickness ?? 0) : 0
 
   const toSvg = (z: number, y: number) =>
     `${z * scale + xOffset},${cy - y * scale}`
 
-  // Use backend surface curves when available; else build lens from geometry
-  const lensPath = useMemo(() => {
-    const surfs = traceResult?.surfaces
-    if (surfs && surfs.length >= 2) {
-      // Pair front and back surfaces for singlet lens fill
-      const front = surfs[0] ?? []
-      const back = surfs[1] ?? []
-      if (front.length >= 2 && back.length >= 2) {
-        const pts = [
-          ...front.map(([z, y]) => toSvg(z, y)),
-          ...back.slice().reverse().map(([z, y]) => toSvg(z, y)),
-        ]
-        return `M ${pts[0]} L ${pts.slice(1).join(' L ')} Z`
+  /** Generate SVG path for a single surface profile at z with given radius and diameter */
+  function surfaceProfilePath(
+    zPos: number,
+    radius: number,
+    diameter: number,
+    nPts = 24
+  ): string {
+    const semi = diameter / 2
+    const pts: string[] = []
+    if (Math.abs(radius) < 0.1) {
+      pts.push(toSvg(zPos, -semi))
+      pts.push(toSvg(zPos, semi))
+    } else {
+      const R = radius
+      for (let i = 0; i <= nPts; i++) {
+        const t = i / nPts
+        const y = (t - 0.5) * 2 * semi
+        const radicand = Math.max(0, R * R - y * y)
+        const zLocal = R - Math.sign(R) * Math.sqrt(radicand)
+        const zGlobal = zPos + zLocal
+        pts.push(toSvg(zGlobal, y))
       }
     }
-    return getLensPath(
-      lensX1, lensX2, radius1, radius2, semiHeight, viewHeight, scale, xOffset
-    )
-  }, [traceResult, scale, xOffset, cy, lensX1, lensX2, radius1, radius2, semiHeight, viewHeight])
+    return pts.length >= 2 ? `M ${pts[0]} L ${pts.slice(1).join(' L ')}` : ''
+  }
+
+  /** Lens elements (glass/air) and surface outlines. refractiveIndex used for color-coding. */
+  const lensElements = useMemo(() => {
+    const elements: {
+      type: 'glass' | 'air' | 'surface'
+      path: string
+      key: string
+      refractiveIndex: number
+    }[] = []
+    for (let i = 0; i < surfaces.length; i++) {
+      const s = surfaces[i]
+      const z = zPositions[i] ?? 0
+      const n = s.refractiveIndex ?? 1
+      const path = surfaceProfilePath(z, s.radius, s.diameter ?? epd)
+      if (path) {
+        elements.push({ type: 'surface', path, key: `surf-${i}`, refractiveIndex: n })
+      }
+      if (i < surfaces.length - 1) {
+        const next = surfaces[i + 1]
+        const zNext = zPositions[i + 1] ?? z + s.thickness
+        const pathFront = surfaceProfilePath(z, s.radius, s.diameter ?? epd)
+        const pathBack = surfaceProfilePath(zNext, next.radius, next.diameter ?? epd)
+        if (pathFront && pathBack) {
+          const frontPts = pathFront.split(' L ').map((p) => p.replace('M ', ''))
+          const backPts = pathBack.split(' L ').map((p) => p.replace('M ', '')).reverse()
+          const closed = `M ${frontPts.join(' L ')} L ${backPts.join(' L ')} Z`
+          const gapType = n > 1.01 ? 'glass' : 'air'
+          elements.push({ type: gapType, path: closed, key: `gap-${i}`, refractiveIndex: n })
+        }
+      }
+    }
+    return elements
+  }, [surfaces, zPositions, epd, scale, xOffset, cy])
 
   // Rays: backend data or paraxial fallback
   const rays = useMemo(() => {
@@ -338,14 +365,43 @@ export function OpticalViewport({
           </g>
 
           <g filter="url(#lens-glow)">
-            <path
-              d={lensPath}
-              fill="url(#lens-fill)"
-              stroke="#22D3EE"
-              strokeWidth="1.5"
-              strokeOpacity="0.8"
-              style={{ filter: 'drop-shadow(0 0 6px rgba(34, 211, 238, 0.4))' }}
-            />
+            {lensElements.map((el) => {
+              if (el.type === 'glass') {
+                return (
+                  <path
+                    key={el.key}
+                    d={el.path}
+                    fill="rgba(34, 211, 238, 0.2)"
+                    stroke="#22D3EE"
+                    strokeWidth="1.5"
+                    strokeOpacity="0.8"
+                    style={{ filter: 'drop-shadow(0 0 6px rgba(34, 211, 238, 0.4))' }}
+                  />
+                )
+              }
+              if (el.type === 'air') {
+                return (
+                  <path
+                    key={el.key}
+                    d={el.path}
+                    fill="rgba(255, 255, 255, 0.03)"
+                    stroke="rgba(148, 163, 184, 0.4)"
+                    strokeWidth="1"
+                    strokeOpacity="0.6"
+                  />
+                )
+              }
+              return (
+                <path
+                  key={el.key}
+                  d={el.path}
+                  fill="none"
+                  stroke="#22D3EE"
+                  strokeWidth="1.5"
+                  strokeOpacity="0.8"
+                />
+              )
+            })}
           </g>
 
           {rays.map((ray, i) => {

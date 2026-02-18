@@ -34,10 +34,20 @@ export async function traceOpticalStack(opticalStack: {
   fieldAngles: number[]
   numRays: number
 }): Promise<TraceResponse> {
+  const payload = {
+    ...opticalStack,
+    surfaces: opticalStack.surfaces.map((s) => ({
+      ...s,
+      n: s.refractiveIndex,
+      radius: s.radius,
+      thickness: s.thickness,
+      diameter: s.diameter ?? 25,
+    })),
+  }
   const res = await fetch(`${API_BASE}/api/trace`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(opticalStack),
+    body: JSON.stringify(payload),
   })
   if (!res.ok) {
     const text = await res.text()

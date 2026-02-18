@@ -1,5 +1,11 @@
+import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { SystemState, Surface } from '../types/system'
+import {
+  MATERIAL_PRESETS,
+  getPresetForIndex,
+  getIndexForPreset,
+} from '../lib/materials'
 
 type SystemEditorProps = {
   systemState: SystemState
@@ -7,44 +13,126 @@ type SystemEditorProps = {
 }
 
 const inputClass =
-  'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-electric/50'
+  'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-electric focus:ring-1 focus:ring-cyan-electric/30 transition-colors'
 
+const selectClass =
+  'w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-electric focus:ring-1 focus:ring-cyan-electric/30 transition-colors appearance-none cursor-pointer'
+
+type MaterialSelectProps = {
+  surface: Surface
+  isCustomMode: boolean
+  onUpdate: (n: number, material: string, type: 'Glass' | 'Air') => void
+  onSetCustomMode: (custom: boolean) => void
+}
+
+function MaterialSelect({
+  surface,
+  isCustomMode,
+  onUpdate,
+  onSetCustomMode,
+}: MaterialSelectProps) {
+  const preset = getPresetForIndex(surface.refractiveIndex)
+  const showCustomInput = isCustomMode || preset === 'custom'
+
+  const handlePresetChange = (value: string) => {
+    if (value === 'custom') {
+      const n = showCustomInput ? surface.refractiveIndex : 1.5
+      onUpdate(n, `n=${n.toFixed(4)}`, n > 1.01 ? 'Glass' : 'Air')
+      onSetCustomMode(true)
+      return
+    }
+    onSetCustomMode(false)
+    const n = getIndexForPreset(value)
+    const p = MATERIAL_PRESETS.find((x) => x.value === value)
+    const material = p ? p.label.split(' ')[0] : 'Air'
+    onUpdate(n, material, n > 1.01 ? 'Glass' : 'Air')
+  }
+
+  const handleCustomChange = (val: string) => {
+    const n = parseFloat(val) || 1
+    const clamped = Math.max(1, Math.min(3, n))
+    onUpdate(clamped, `n=${clamped.toFixed(4)}`, clamped > 1.01 ? 'Glass' : 'Air')
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 min-w-[140px]">
+      <select
+        value={preset}
+        onChange={(e) => handlePresetChange(e.target.value)}
+        className={selectClass}
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+          backgroundSize: '1rem',
+          backgroundPosition: 'right 0.5rem center',
+          backgroundRepeat: 'no-repeat',
+          paddingRight: '2rem',
+        }}
+      >
+        {MATERIAL_PRESETS.map((p) => (
+          <option key={p.value} value={p.value}>
+            {p.label}
+          </option>
+        ))}
+        <option value="custom">Custom...</option>
+      </select>
+      {showCustomInput && (
+        <input
+          type="number"
+          value={surface.refractiveIndex}
+          onChange={(e) => handleCustomChange(e.target.value)}
+          min={1}
+          max={3}
+          step={0.001}
+          className={inputClass}
+          placeholder="n"
+          autoFocus
+        />
+      )}
+    </div>
+  )
+}
+
+/** Create a new surface. Defaults to Air (n=1.0) so the physics engine knows the ray medium. */
 function createSurface(id: string): Surface {
   return {
     id,
-    type: 'Glass',
-    radius: 100,
-    thickness: 5,
-    refractiveIndex: 1.5168,
+    type: 'Air',
+    radius: 0,
+    thickness: 10,
+    refractiveIndex: 1.0,
     diameter: 25,
-    material: 'N-BK7',
+    material: 'Air',
     description: '',
   }
 }
 
 export function SystemEditor({ systemState, onSystemStateChange }: SystemEditorProps) {
   const surfaces = systemState.surfaces
+  const [customMaterialIds, setCustomMaterialIds] = useState<Set<string>>(new Set())
 
   const updateSurface = (index: number, partial: Partial<Surface>) => {
-    onSystemStateChange((prev) => {
-      let next = { ...prev.surfaces[index], ...partial }
-      if ('material' in partial) {
-        const m = String(partial.material ?? '').trim().toLowerCase()
-        if (m === 'air') {
-          next = { ...next, type: 'Air', refractiveIndex: 1 }
-        } else if (m && next.type === 'Air') {
-          next = { ...next, type: 'Glass', refractiveIndex: 1.5168 }
-        }
-      }
-      return {
-        ...prev,
-        surfaces: prev.surfaces.map((s, i) => (i === index ? next : s)),
-      }
-    })
+    onSystemStateChange((prev) => ({
+      ...prev,
+      surfaces: prev.surfaces.map((s, i) =>
+        i === index ? { ...s, ...partial } : s
+      ),
+    }))
+  }
+
+  const updateMaterial = (index: number, n: number, material: string, type: 'Glass' | 'Air') => {
+    updateSurface(index, { refractiveIndex: n, material, type })
   }
 
   const removeSurface = (index: number) => {
     if (surfaces.length <= 1) return
+    const idToRemove = surfaces[index]?.id
+    if (idToRemove) {
+      setCustomMaterialIds((prev) => {
+        const next = new Set(prev)
+        next.delete(idToRemove)
+        return next
+      })
+    }
     onSystemStateChange((prev) => ({
       ...prev,
       surfaces: prev.surfaces.filter((_, i) => i !== index),
@@ -70,7 +158,7 @@ export function SystemEditor({ systemState, onSystemStateChange }: SystemEditorP
     { key: 'num', label: '#', width: 'w-12' },
     { key: 'radius', label: 'Radius (mm)', width: 'w-24' },
     { key: 'thickness', label: 'Thickness (mm)', width: 'w-28' },
-    { key: 'material', label: 'Glass/Material', width: 'w-32' },
+    { key: 'materialIndex', label: 'Material/Index', width: 'w-36' },
     { key: 'diameter', label: 'Diameter (mm)', width: 'w-24' },
     { key: 'description', label: 'Description', width: 'flex-1' },
     { key: 'actions', label: '', width: 'w-12' },
@@ -148,14 +236,20 @@ export function SystemEditor({ systemState, onSystemStateChange }: SystemEditorP
                     />
                   </td>
                   <td className="px-4 py-2">
-                    <input
-                      type="text"
-                      value={s.material}
-                      onChange={(e) =>
-                        updateSurface(i, { material: e.target.value })
+                    <MaterialSelect
+                      surface={s}
+                      isCustomMode={customMaterialIds.has(s.id)}
+                      onUpdate={(n, material, type) =>
+                        updateMaterial(i, n, material, type)
                       }
-                      className={inputClass}
-                      placeholder="N-BK7, Air..."
+                      onSetCustomMode={(custom) => {
+                        setCustomMaterialIds((prev) => {
+                          const next = new Set(prev)
+                          if (custom) next.add(s.id)
+                          else next.delete(s.id)
+                          return next
+                        })
+                      }}
                     />
                   </td>
                   <td className="px-4 py-2">
