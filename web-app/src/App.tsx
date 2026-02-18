@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
-import { NavBar } from './components/NavBar'
+import { NavBar, type NavTab } from './components/NavBar'
 import { Canvas } from './components/Canvas'
+import { SystemEditor } from './components/SystemEditor'
 import { SystemProperties } from './components/SystemProperties'
 import {
   DEFAULT_SYSTEM_STATE,
@@ -9,6 +10,7 @@ import {
 } from './types/system'
 
 function App() {
+  const [activeTab, setActiveTab] = useState<NavTab>('lens')
   const [systemState, setSystemState] = useState<SystemState>(() => ({
     ...DEFAULT_SYSTEM_STATE,
     ...computePerformance(DEFAULT_SYSTEM_STATE),
@@ -28,13 +30,31 @@ function App() {
 
   return (
     <div className="min-h-screen bg-midnight flex flex-col">
-      <NavBar />
+      <NavBar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 overflow-auto p-4">
-          <Canvas
-            systemState={systemState}
-            onSystemStateChange={onSystemStateChange}
-          />
+          {activeTab === 'lens' && (
+            <Canvas
+              systemState={systemState}
+              onSystemStateChange={onSystemStateChange}
+            />
+          )}
+          {activeTab === 'system' && (
+            <SystemEditor
+              systemState={systemState}
+              onSystemStateChange={onSystemStateChange}
+            />
+          )}
+          {activeTab === 'properties' && (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              Properties view — use the right sidebar
+            </div>
+          )}
+          {activeTab === 'export' && (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              Export view — coming soon
+            </div>
+          )}
         </main>
         <aside className="w-80 shrink-0 overflow-auto">
           <SystemProperties

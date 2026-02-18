@@ -208,7 +208,7 @@ export function SystemProperties({ systemState, onSystemStateChange }: SystemPro
                 className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 border border-white/10"
               >
                 <span className="text-sm">
-                  {s.type} R={s.radius > 0 ? s.radius : s.radius}
+                  {s.material ?? s.type} R={s.radius}
                 </span>
                 <span className="text-cyan-electric text-xs">t={s.thickness}</span>
               </div>

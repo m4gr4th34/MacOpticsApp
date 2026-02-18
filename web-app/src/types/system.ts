@@ -4,6 +4,17 @@ export type Surface = {
   radius: number
   thickness: number
   refractiveIndex: number
+  diameter: number
+  material: string
+  description: string
+}
+
+export type TraceResult = {
+  rays: number[][][]
+  surfaces: number[][][]
+  focusZ: number
+  zOrigin?: number
+  performance?: { rmsSpotRadius: number; totalLength: number; fNumber: number }
 }
 
 export type SystemState = {
@@ -17,15 +28,21 @@ export type SystemState = {
   rmsSpotRadius: number
   totalLength: number
   fNumber: number
+  // Backend trace result (z,y coords)
+  traceResult: TraceResult | null
+  traceError: string | null
 }
 
-/** Compute performance metrics from system state (simplified paraxial model) */
+/** Compute performance metrics from system state (prefer trace result when available) */
 export function computePerformance(state: SystemState): Pick<
   SystemState,
   'rmsSpotRadius' | 'totalLength' | 'fNumber'
 > {
+  if (state.traceResult?.performance) {
+    const p = state.traceResult.performance
+    return { rmsSpotRadius: p.rmsSpotRadius, totalLength: p.totalLength, fNumber: p.fNumber }
+  }
   const totalLength = state.surfaces.reduce((sum, s) => sum + s.thickness, 0)
-  // Paraxial EFL approx for thin lens: 1/f = (n-1)(1/R1 - 1/R2)
   const s0 = state.surfaces[0]
   const s1 = state.surfaces[1]
   const efl =
@@ -33,7 +50,6 @@ export function computePerformance(state: SystemState): Pick<
       ? 1 / ((s0.refractiveIndex - 1) * (1 / s0.radius - 1 / -s1.radius))
       : 100
   const fNumber = state.entrancePupilDiameter > 0 ? efl / state.entrancePupilDiameter : 0
-  // RMS spot: rough estimate from field angles
   const rmsSpotRadius =
     state.fieldAngles.length > 0
       ? 0.01 * Math.sqrt(state.fieldAngles.reduce((s, a) => s + a * a, 0) / state.fieldAngles.length)
@@ -48,10 +64,30 @@ export const DEFAULT_SYSTEM_STATE: SystemState = {
   numRays: 9,
   hasTraced: false,
   surfaces: [
-    { id: '1', type: 'Glass', radius: 100, thickness: 5, refractiveIndex: 1.5168 },
-    { id: '2', type: 'Air', radius: -100, thickness: 95, refractiveIndex: 1 },
+    {
+      id: '1',
+      type: 'Glass',
+      radius: 100,
+      thickness: 5,
+      refractiveIndex: 1.5168,
+      diameter: 25,
+      material: 'N-BK7',
+      description: 'Front surface',
+    },
+    {
+      id: '2',
+      type: 'Air',
+      radius: -100,
+      thickness: 95,
+      refractiveIndex: 1,
+      diameter: 25,
+      material: 'Air',
+      description: 'Back surface',
+    },
   ],
   rmsSpotRadius: 0,
   totalLength: 100,
   fNumber: 10,
+  traceResult: null,
+  traceError: null,
 }
