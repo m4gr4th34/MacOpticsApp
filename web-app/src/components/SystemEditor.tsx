@@ -252,6 +252,7 @@ export function SystemEditor({
   const surfaces = systemState.surfaces
   const [customMaterialIds, setCustomMaterialIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
+  const [hoveredInsertIndex, setHoveredInsertIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -334,19 +335,14 @@ export function SystemEditor({
     }))
   }
 
-  const addSurface = () => {
+  const insertSurfaceAt = (index: number) => {
     const newSurface = createSurface()
-    const selectedIndex = selectedSurfaceId
-      ? surfaces.findIndex((s) => s.id === selectedSurfaceId)
-      : -1
-    const insertIndex = selectedIndex >= 0 ? selectedIndex + 1 : surfaces.length
-
     onSystemStateChange((prev) => ({
       ...prev,
       surfaces: [
-        ...prev.surfaces.slice(0, insertIndex),
+        ...prev.surfaces.slice(0, index),
         newSurface,
-        ...prev.surfaces.slice(insertIndex),
+        ...prev.surfaces.slice(index),
       ],
     }))
     onSelectSurface(newSurface.id)
@@ -407,18 +403,6 @@ export function SystemEditor({
             <Download className="w-5 h-5" strokeWidth={2} />
             Save Design
           </button>
-          <button
-            onClick={addSurface}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all"
-            style={{
-              background: 'linear-gradient(135deg, #22D3EE 0%, #0891b2 100%)',
-              color: '#0B1120',
-              boxShadow: '0 0 24px rgba(34, 211, 238, 0.3)',
-            }}
-          >
-            <Plus className="w-5 h-5" strokeWidth={2} />
-            New Surface
-          </button>
         </div>
       </div>
 
@@ -438,105 +422,154 @@ export function SystemEditor({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {surfaces.map((s, i) => (
-                <motion.tr
-                  key={s.id}
-                  layout
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest('input, button, select')) return
-                    onSelectSurface(s.id)
-                  }}
-                  className={`cursor-pointer transition-colors ${
-                    selectedSurfaceId === s.id
-                      ? 'bg-cyan-electric/20 ring-1 ring-cyan-electric/50'
-                      : 'hover:bg-white/5'
-                  }`}
-                >
-                  <td className="px-4 py-3 text-slate-400 font-mono text-sm">
-                    {i + 1}
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="number"
-                      value={s.radius}
-                      onChange={(e) =>
-                        updateSurface(i, {
-                          radius: Number(e.target.value) || 0,
-                        })
-                      }
-                      className={inputClass}
-                      step={1}
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="number"
-                      value={s.thickness}
-                      onChange={(e) =>
-                        updateSurface(i, {
-                          thickness: Number(e.target.value) || 0,
-                        })
-                      }
-                      className={inputClass}
-                      min={0}
-                      step={0.1}
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <MaterialSelect
-                      surface={s}
-                      isCustomMode={customMaterialIds.has(s.id)}
-                      onUpdate={(n, material, type) =>
-                        updateMaterial(i, n, material, type)
-                      }
-                      onSetCustomMode={(custom) => {
-                        setCustomMaterialIds((prev) => {
-                          const next = new Set(prev)
-                          if (custom) next.add(s.id)
-                          else next.delete(s.id)
-                          return next
-                        })
-                      }}
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="number"
-                      value={s.diameter}
-                      onChange={(e) =>
-                        updateSurface(i, {
-                          diameter: Number(e.target.value) || 0,
-                        })
-                      }
-                      className={inputClass}
-                      min={0}
-                      step={0.5}
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="text"
-                      value={s.description}
-                      onChange={(e) =>
-                        updateSurface(i, { description: e.target.value })
-                      }
-                      className={inputClass}
-                      placeholder="Optional notes..."
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <button
-                      onClick={() => removeSurface(i)}
-                      disabled={surfaces.length <= 1}
-                      className="p-2 rounded text-slate-500 hover:text-red-400 hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-slate-500"
-                      aria-label="Remove surface"
+              {surfaces.flatMap((s, i) => {
+                const insertIndex = i + 1
+                const isHovered = hoveredInsertIndex === insertIndex
+                return [
+                  <motion.tr
+                    key={s.id}
+                    layout
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('input, button, select')) return
+                      onSelectSurface(s.id)
+                    }}
+                    className={`cursor-pointer transition-colors ${
+                      selectedSurfaceId === s.id
+                        ? 'bg-cyan-electric/20 ring-1 ring-cyan-electric/50'
+                        : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-slate-400 font-mono text-sm">
+                      {i + 1}
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        value={s.radius}
+                        onChange={(e) =>
+                          updateSurface(i, {
+                            radius: Number(e.target.value) || 0,
+                          })
+                        }
+                        className={inputClass}
+                        step={1}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        value={s.thickness}
+                        onChange={(e) =>
+                          updateSurface(i, {
+                            thickness: Number(e.target.value) || 0,
+                          })
+                        }
+                        className={inputClass}
+                        min={0}
+                        step={0.1}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <MaterialSelect
+                        surface={s}
+                        isCustomMode={customMaterialIds.has(s.id)}
+                        onUpdate={(n, material, type) =>
+                          updateMaterial(i, n, material, type)
+                        }
+                        onSetCustomMode={(custom) => {
+                          setCustomMaterialIds((prev) => {
+                            const next = new Set(prev)
+                            if (custom) next.add(s.id)
+                            else next.delete(s.id)
+                            return next
+                          })
+                        }}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        value={s.diameter}
+                        onChange={(e) =>
+                          updateSurface(i, {
+                            diameter: Number(e.target.value) || 0,
+                          })
+                        }
+                        className={inputClass}
+                        min={0}
+                        step={0.5}
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="text"
+                        value={s.description}
+                        onChange={(e) =>
+                          updateSurface(i, { description: e.target.value })
+                        }
+                        className={inputClass}
+                        placeholder="Optional notes..."
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={() => removeSurface(i)}
+                        disabled={surfaces.length <= 1}
+                        className="p-2 rounded text-slate-500 hover:text-red-400 hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-slate-500"
+                        aria-label="Remove surface"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </motion.tr>,
+                  <motion.tr
+                    key={`insert-${insertIndex}`}
+                    layout
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  >
+                    <td
+                      colSpan={7}
+                      className="p-0 align-middle"
+                      onMouseEnter={() => setHoveredInsertIndex(insertIndex)}
+                      onMouseLeave={() => setHoveredInsertIndex(null)}
+                      onClick={() => insertSurfaceAt(insertIndex)}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
+                      <div
+                        className={`flex items-center justify-center cursor-pointer transition-all duration-150 ${
+                          isHovered ? 'h-8 bg-cyan-electric/5' : 'h-2 hover:h-5 hover:bg-white/5'
+                        }`}
+                      >
+                        <div
+                          className={`flex items-center gap-2 transition-all duration-150 ${
+                            isHovered ? 'opacity-100' : 'opacity-0'
+                          }`}
+                        >
+                          <div
+                            className={`h-px flex-1 max-w-[80px] transition-colors ${
+                              isHovered ? 'bg-cyan-electric' : 'bg-transparent'
+                            }`}
+                          />
+                          <div
+                            className={`flex h-6 w-6 items-center justify-center rounded-full transition-colors ${
+                              isHovered
+                                ? 'bg-cyan-electric text-midnight'
+                                : 'bg-white/20 text-slate-400'
+                            }`}
+                          >
+                            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+                          </div>
+                          <div
+                            className={`h-px flex-1 max-w-[80px] transition-colors ${
+                              isHovered ? 'bg-cyan-electric' : 'bg-transparent'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                  </motion.tr>,
+                ]
+              })}
             </tbody>
           </table>
         </div>
