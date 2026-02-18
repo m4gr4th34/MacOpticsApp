@@ -240,6 +240,7 @@ export function OpticalViewport({
             rays: res.rays ?? [],
             surfaces: res.surfaces ?? [],
             focusZ: res.focusZ ?? 0,
+            bestFocusZ: res.bestFocusZ,
             zOrigin: res.zOrigin,
             performance: res.performance,
             metricsSweep: res.metricsSweep ?? [],
@@ -369,45 +370,94 @@ export function OpticalViewport({
     ? traceResult.focusZ * scale + xOffset
     : focusX * scale + xOffset
 
+  const bestFocusZ = traceResult?.bestFocusZ
+  const bestFocusSvgX = bestFocusZ != null ? bestFocusZ * scale + xOffset : null
+
   const opticalBounds = useMemo(
     () => computeOpticalBounds(traceResult, surfaces, epd),
     [traceResult, surfaces, epd]
   )
 
   const svgRef = useRef<SVGSVGElement>(null)
+  const transformInstanceRef = useRef<{
+    transformState: { scale: number; positionX: number; positionY: number }
+    contentComponent: HTMLDivElement | null
+  } | null>(null)
   const [scanHud, setScanHud] = useState<{
     isHovering: boolean
     mouseX: number
     mouseY: number
     cursorSvgX: number
+    cursorSvgY: number
     cursorZ: number
-  }>({ isHovering: false, mouseX: 0, mouseY: 0, cursorSvgX: 0, cursorZ: 0 })
+  }>({ isHovering: false, mouseX: 0, mouseY: 0, cursorSvgX: 0, cursorSvgY: 0, cursorZ: 0 })
 
   const handleSvgMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       const svg = svgRef.current
+      const instance = transformInstanceRef.current
       if (!svg) return
-      const pt = svg.createSVGPoint()
-      pt.x = e.clientX
-      pt.y = e.clientY
-      const ctm = svg.getScreenCTM()
-      if (!ctm) return
-      const svgPt = pt.matrixTransform(ctm.inverse())
-      const z = (svgPt.x - xOffset) / scale
+
+      let cursorSvgX: number
+      let cursorSvgY: number
+
+      if (instance?.contentComponent) {
+        const rect = instance.contentComponent.getBoundingClientRect()
+        const vbW = viewWidth
+        const vbH = viewHeight
+        const scaleFit = Math.min(rect.width / vbW, rect.height / vbH)
+        const renderedW = vbW * scaleFit
+        const renderedH = vbH * scaleFit
+        const offsetX = (rect.width - renderedW) / 2
+        const offsetY = (rect.height - renderedH) / 2
+        cursorSvgX = (e.clientX - rect.left - offsetX) / scaleFit
+        cursorSvgY = (e.clientY - rect.top - offsetY) / scaleFit
+      } else {
+        const rect = svg.getBoundingClientRect()
+        const vbW = viewWidth
+        const vbH = viewHeight
+        const scaleFit = Math.min(rect.width / vbW, rect.height / vbH)
+        const renderedW = vbW * scaleFit
+        const renderedH = vbH * scaleFit
+        const offsetX = (rect.width - renderedW) / 2
+        const offsetY = (rect.height - renderedH) / 2
+        cursorSvgX = (e.clientX - rect.left - offsetX) / scaleFit
+        cursorSvgY = (e.clientY - rect.top - offsetY) / scaleFit
+      }
+
+      const zCursorPos = (cursorSvgX - xOffset) / scale
       setScanHud({
         isHovering: true,
         mouseX: e.clientX,
         mouseY: e.clientY,
-        cursorSvgX: svgPt.x,
-        cursorZ: z,
+        cursorSvgX,
+        cursorSvgY,
+        cursorZ: zCursorPos,
       })
     },
-    [scale, xOffset]
+    [scale, xOffset, viewWidth, viewHeight]
   )
 
   const handleSvgMouseLeave = useCallback(() => {
     setScanHud((prev) => ({ ...prev, isHovering: false }))
   }, [])
+
+  const handleSvgDoubleClick = useCallback(() => {
+    const z = traceResult?.bestFocusZ
+    if (z == null || surfaces.length < 2) return
+    const totalLength = surfaces.reduce((sum, s) => sum + (s.thickness ?? 0), 0)
+    const lastSurface = surfaces[surfaces.length - 1]
+    const sumOfRest = totalLength - (lastSurface?.thickness ?? 0)
+    const newThickness = Math.max(0.1, z - sumOfRest)
+    onSystemStateChange((prev) => ({
+      ...prev,
+      surfaces: prev.surfaces.map((s, i) =>
+        i === prev.surfaces.length - 1 ? { ...s, thickness: newThickness } : s
+      ),
+      traceResult: null,
+      traceError: null,
+    }))
+  }, [traceResult?.bestFocusZ, surfaces, onSystemStateChange])
 
   const scanMetrics = scanHud.isHovering
     ? interpolateMetricsAtZ(traceResult?.metricsSweep ?? [], scanHud.cursorZ)
@@ -493,6 +543,12 @@ export function OpticalViewport({
           doubleClick={{ disabled: true }}
         >
           {({ zoomIn, zoomOut, centerView, instance }) => {
+            transformInstanceRef.current = instance
+              ? {
+                  transformState: instance.transformState,
+                  contentComponent: instance.contentComponent,
+                }
+              : null
             const handleResetView = () => {
               const wrapper = instance?.wrapperComponent
               if (!wrapper) return
@@ -526,6 +582,7 @@ export function OpticalViewport({
               onMouseEnter={handleSvgMouseMove}
               onMouseMove={handleSvgMouseMove}
               onMouseLeave={handleSvgMouseLeave}
+              onDoubleClick={handleSvgDoubleClick}
             >
               <defs>
                 <pattern
@@ -551,6 +608,13 @@ export function OpticalViewport({
                 </filter>
                 <filter id="glow-strong" x="-50%" y="-50%" width="200%" height="200%">
                   <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <filter id="diamond-glow" x="-100%" y="-100%" width="300%" height="300%">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
                   <feMerge>
                     <feMergeNode in="blur" />
                     <feMergeNode in="SourceGraphic" />
@@ -667,18 +731,59 @@ export function OpticalViewport({
             />
           )}
 
+          {bestFocusSvgX != null && hasTraced && rays.length > 0 && (
+            <g transform={`translate(${bestFocusSvgX}, ${cy})`}>
+              <motion.g
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{
+                  opacity: 1,
+                  scale: [1, 1.2, 1],
+                }}
+                transition={{
+                  opacity: { duration: 0.3, delay: 0.6 },
+                  scale: {
+                    duration: 2.2,
+                    repeat: Infinity,
+                    repeatType: 'reverse',
+                  },
+                }}
+              >
+                <polygon
+                  points="0,-6 6,0 0,6 -6,0"
+                  fill="white"
+                  stroke="rgba(255,255,255,0.9)"
+                  strokeWidth="1"
+                  filter="url(#diamond-glow)"
+                />
+              </motion.g>
+            </g>
+          )}
+
           {scanHud.isHovering && (
-            <line
-              x1={scanHud.cursorSvgX}
-              y1={0}
-              x2={scanHud.cursorSvgX}
-              y2={viewHeight}
-              stroke="#22D3EE"
-              strokeWidth="1"
-              strokeDasharray="4 4"
-              strokeOpacity="0.8"
-              pointerEvents="none"
-            />
+            <>
+              <line
+                x1={scanHud.cursorSvgX}
+                y1={0}
+                x2={scanHud.cursorSvgX}
+                y2={viewHeight}
+                stroke="#22D3EE"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+                strokeOpacity="0.8"
+                pointerEvents="none"
+              />
+              {/* Debug circle: verifies mouse→SVG coordinate transform (remove when verified) */}
+              <circle
+                cx={scanHud.cursorSvgX}
+                cy={scanHud.cursorSvgY}
+                r="8"
+                fill="none"
+                stroke="#f97316"
+                strokeWidth="2"
+                opacity="0.9"
+                pointerEvents="none"
+              />
+            </>
           )}
         </svg>
           </TransformComponent>
@@ -761,6 +866,14 @@ export function OpticalViewport({
                     : '—'}
                   {'°'}
                 </span>
+                {bestFocusZ != null && (
+                  <>
+                    <span className="text-slate-400">Dist to Best Focus:</span>
+                    <span className="text-cyan-electric tabular-nums">
+                      {Math.abs(scanHud.cursorZ - bestFocusZ).toFixed(2)} mm
+                    </span>
+                  </>
+                )}
               </div>
             </motion.div>
           )}

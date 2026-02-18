@@ -22,6 +22,7 @@ export type TraceResult = {
   rays: number[][][]
   surfaces: number[][][]
   focusZ: number
+  bestFocusZ?: number
   zOrigin?: number
   performance?: { rmsSpotRadius: number; totalLength: number; fNumber: number }
   metricsSweep?: MetricsAtZ[]

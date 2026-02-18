@@ -143,6 +143,15 @@ class TestThreeSurfaceRayIntersections:
             assert "yCentroid" in pt
             assert "numRays" in pt
 
+    def test_best_focus_z_returned(self, three_surface_optical_stack):
+        """Result should include bestFocusZ (Z where RMS is minimum)."""
+        result = run_trace(three_surface_optical_stack)
+        assert "bestFocusZ" in result
+        bfz = result["bestFocusZ"]
+        assert isinstance(bfz, (int, float))
+        assert bfz > 0
+        assert bfz <= result["focusZ"] + 5  # Best focus should be near paraxial focus
+
 
 class TestGetMetricsAtZ:
     """Tests for get_metrics_at_z interpolation and metrics calculation."""

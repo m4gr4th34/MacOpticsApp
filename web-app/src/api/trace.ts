@@ -11,6 +11,7 @@ export type TraceResponse = {
   rays?: number[][][]  // [[[z,y], ...], ...] per ray
   surfaces?: number[][][]  // [[[z,y], ...], ...] per surface curve
   focusZ?: number
+  bestFocusZ?: number
   zOrigin?: number
   performance?: {
     rmsSpotRadius: number

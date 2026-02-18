@@ -170,10 +170,10 @@ def get_metrics_at_z(z_pos, ray_data):
 
     y_vals = np.array([p[0] for p in interpolated])
     n = len(y_vals)
-    y_centroid = float(np.mean(y_vals))
+    y_mean = float(np.mean(y_vals))
 
-    # RMS Radius: sqrt(1/N * sum((y_i - y_centroid)^2))
-    rms_radius = float(np.sqrt(np.mean((y_vals - y_centroid) ** 2)))
+    # RMS Radius: sqrt(sum((y_i - y_mean)^2) / N) — centroid-based
+    rms_radius = float(np.sqrt(np.mean((y_vals - y_mean) ** 2)))
 
     # Beam Width: max Y - min Y
     beam_width = float(np.max(y_vals) - np.min(y_vals))
@@ -187,7 +187,7 @@ def get_metrics_at_z(z_pos, ray_data):
         "rmsRadius": rms_radius,
         "beamWidth": beam_width,
         "chiefRayAngle": float(chief_ray_angle) if chief_ray_angle is not None else None,
-        "yCentroid": y_centroid,
+        "yCentroid": y_mean,
         "numRays": n,
     }
 
@@ -244,7 +244,7 @@ def run_trace(optical_stack: dict) -> dict:
 
     surfaces = optical_stack.get("surfaces", [])
     if not surfaces:
-        return {"error": "No surfaces provided", "rays": [], "surfaces": [], "focusZ": 0, "metricsSweep": []}
+        return {"error": "No surfaces provided", "rays": [], "surfaces": [], "focusZ": 0, "bestFocusZ": 0, "metricsSweep": []}
 
     epd = float(optical_stack.get("entrancePupilDiameter", 10) or 10)
     wvl_nm = float(optical_stack.get("wavelengths", [587.6])[0] or 587.6)
@@ -264,7 +264,7 @@ def run_trace(optical_stack: dict) -> dict:
             surface_diameters=surface_diameters,
         )
     except Exception as e:
-        return {"error": str(e), "rays": [], "surfaces": [], "focusZ": 0, "metricsSweep": []}
+        return {"error": str(e), "rays": [], "surfaces": [], "focusZ": 0, "bestFocusZ": 0, "metricsSweep": []}
 
     sm = opt_model.seq_model
     tfrms = sm.gbl_tfrms
@@ -337,10 +337,25 @@ def run_trace(optical_stack: dict) -> dict:
 
     metrics_sweep = _precompute_metrics_sweep(rays, num_points=100)
 
+    # Best Focus: Z where RMS spot radius is minimum (between last lens and image plane)
+    # Use global Z from rayoptics tfrms, not thickness-based calculation
+    last_lens_z_global = tfrms[-2][1][2] if len(tfrms) >= 2 else 0.0
+    last_lens_z = last_lens_z_global - z_origin  # same coord system as rays
+    candidates = [
+        p for p in metrics_sweep
+        if p["z"] >= last_lens_z and p["z"] <= focus_z and p.get("rmsRadius") is not None
+    ]
+    if candidates:
+        best_focus = min(candidates, key=lambda p: p["rmsRadius"])
+        best_focus_z = float(best_focus["z"])
+    else:
+        best_focus_z = float(focus_z)
+
     return {
         "rays": rays,
         "surfaces": surface_curves,
         "focusZ": float(focus_z),
+        "bestFocusZ": best_focus_z,
         "zOrigin": float(z_origin),
         "performance": {
             "rmsSpotRadius": rms_spot_radius,
