@@ -1,9 +1,13 @@
 import { useMemo, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Play, Loader2 } from 'lucide-react'
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
+import { Play, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import type { SystemState, TraceResult } from '../types/system'
 import { traceOpticalStack } from '../api/trace'
 import { config } from '../config'
+
+const GRID_SIZE = 64
+const GRID_EXTENT = 10000
 
 type RayPoint = { x: number; y: number }
 type Ray = { points: RayPoint[]; color: string }
@@ -106,16 +110,55 @@ function computeViewTransform(
   return { scale, xOffset, cy }
 }
 
+/** Compute optical content bounds (Z range, Y extent) for fit-to-view. */
+function computeOpticalBounds(
+  traceResult: TraceResult | null,
+  surfaces: { thickness: number; diameter?: number }[],
+  epd: number
+): { zRange: number; yExtent: number } {
+  const { minZExtent, extendZFactor, extendZMin } = config.view
+  const zTotal = surfaces.reduce((sum, s) => sum + (s.thickness ?? 0), 0)
+  const dMax = surfaces.length
+    ? Math.max(epd, ...surfaces.map((s) => s.diameter ?? epd))
+    : epd
+  let yExtent = Math.max(dMax / 2, 5)
+  let zMin = 0
+  let zMax = Math.max(zTotal, extendZMin)
+  if (surfaces.length) {
+    zMin = -Math.max(minZExtent, zTotal * extendZFactor)
+    zMax = zTotal + Math.max(extendZMin, zTotal * extendZFactor)
+  }
+  if (traceResult?.rays?.length || traceResult?.surfaces?.length) {
+    const scan = (z: number, y: number) => {
+      zMin = Math.min(zMin, z)
+      zMax = Math.max(zMax, z)
+      yExtent = Math.max(yExtent, Math.abs(y))
+    }
+    for (const ray of traceResult.rays ?? []) {
+      for (const [z, y] of ray) scan(z, y)
+    }
+    for (const surf of traceResult.surfaces ?? []) {
+      for (const [z, y] of surf) scan(z, y)
+    }
+    if (traceResult.focusZ != null) scan(traceResult.focusZ, 0)
+  }
+  return { zRange: zMax - zMin, yExtent }
+}
+
 type OpticalViewportProps = {
   className?: string
   systemState: SystemState
   onSystemStateChange: (state: SystemState | ((prev: SystemState) => SystemState)) => void
+  selectedSurfaceId: string | null
+  onSelectSurface: (id: string | null) => void
 }
 
 export function OpticalViewport({
   className = '',
   systemState,
   onSystemStateChange,
+  selectedSurfaceId,
+  onSelectSurface,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
   const numRays = systemState.numRays
@@ -231,6 +274,7 @@ export function OpticalViewport({
       path: string
       key: string
       refractiveIndex: number
+      surfaceId: string
     }[] = []
     for (let i = 0; i < surfaces.length; i++) {
       const s = surfaces[i]
@@ -238,7 +282,7 @@ export function OpticalViewport({
       const n = s.refractiveIndex ?? 1
       const path = surfaceProfilePath(z, s.radius, s.diameter ?? epd)
       if (path) {
-        elements.push({ type: 'surface', path, key: `surf-${i}`, refractiveIndex: n })
+        elements.push({ type: 'surface', path, key: `surf-${i}`, refractiveIndex: n, surfaceId: s.id })
       }
       if (i < surfaces.length - 1) {
         const next = surfaces[i + 1]
@@ -250,7 +294,7 @@ export function OpticalViewport({
           const backPts = pathBack.split(' L ').map((p) => p.replace('M ', '')).reverse()
           const closed = `M ${frontPts.join(' L ')} L ${backPts.join(' L ')} Z`
           const gapType = n > 1.01 ? 'glass' : 'air'
-          elements.push({ type: gapType, path: closed, key: `gap-${i}`, refractiveIndex: n })
+          elements.push({ type: gapType, path: closed, key: `gap-${i}`, refractiveIndex: n, surfaceId: s.id })
         }
       }
     }
@@ -278,6 +322,11 @@ export function OpticalViewport({
   const focusSvgX = traceResult?.focusZ != null
     ? traceResult.focusZ * scale + xOffset
     : focusX * scale + xOffset
+
+  const opticalBounds = useMemo(
+    () => computeOpticalBounds(traceResult, surfaces, epd),
+    [traceResult, surfaces, epd]
+  )
 
   return (
     <div className={`relative ${className}`}>
@@ -322,60 +371,133 @@ export function OpticalViewport({
       )}
 
       <div
-        className="overflow-hidden rounded-xl"
+        className="relative overflow-hidden rounded-xl"
         style={{
           backgroundColor: '#0B1120',
           border: '1px solid rgba(34, 211, 238, 0.2)',
         }}
       >
-        <svg
-          viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-          className="w-full h-full min-h-[320px]"
-          preserveAspectRatio="xMidYMid meet"
+        <TransformWrapper
+          initialScale={1}
+          minScale={0.1}
+          maxScale={20}
+          centerOnInit
+          limitToBounds={false}
+          smooth
+          wheel={{
+            step: 0.15,
+            smoothStep: 0.002,
+            wheelDisabled: false,
+            touchPadDisabled: false,
+          }}
+          panning={{
+            disabled: false,
+            velocityDisabled: true,
+            allowLeftClickPan: false,
+            allowMiddleClickPan: true,
+            allowRightClickPan: false,
+            activationKeys: [' '],
+          }}
+          zoomAnimation={{
+            animationTime: 200,
+            animationType: 'easeOut',
+          }}
+          doubleClick={{ disabled: true }}
         >
-          <defs>
-            <filter id="lens-glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="2" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <filter id="glow-strong" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <linearGradient id="lens-fill" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#22D3EE" stopOpacity="0.15" />
-              <stop offset="50%" stopColor="#22D3EE" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#22D3EE" stopOpacity="0.15" />
-            </linearGradient>
-          </defs>
+          {({ zoomIn, zoomOut, centerView, instance }) => {
+            const handleResetView = () => {
+              const wrapper = instance?.wrapperComponent
+              if (!wrapper) return
+              const w = wrapper.offsetWidth
+              const h = wrapper.offsetHeight
+              const padding = 0.1
+              const opticalWidthSvg = opticalBounds.zRange * scale
+              const opticalHeightSvg = 2 * opticalBounds.yExtent * scale
+              const fitScale = Math.min(
+                (w * (1 - 2 * padding)) / opticalWidthSvg,
+                (h * (1 - 2 * padding)) / opticalHeightSvg
+              )
+              centerView(fitScale, 450, 'easeOutCubic')
+            }
+            return (
+              <>
+          <TransformComponent
+            wrapperStyle={{ width: '100%', height: '100%', minHeight: '320px' }}
+            contentStyle={{ width: '100%', height: '100%', minHeight: '320px' }}
+          >
+            <svg
+              viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+              className="w-full h-full min-h-[320px] block"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <defs>
+                <pattern
+                  id="infinite-grid"
+                  width={GRID_SIZE}
+                  height={GRID_SIZE}
+                  patternUnits="userSpaceOnUse"
+                >
+                  <path
+                    d={`M ${GRID_SIZE} 0 L 0 0 0 ${GRID_SIZE}`}
+                    fill="none"
+                    stroke="#22D3EE"
+                    strokeWidth="0.5"
+                    opacity="0.12"
+                  />
+                </pattern>
+                <filter id="lens-glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <filter id="glow-strong" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <linearGradient id="lens-fill" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#22D3EE" stopOpacity="0.15" />
+                  <stop offset="50%" stopColor="#22D3EE" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#22D3EE" stopOpacity="0.15" />
+                </linearGradient>
+              </defs>
 
-          <g opacity="0.12">
-            {Array.from({ length: Math.ceil(viewWidth / 64) + 1 }, (_, i) => (
-              <line key={`v${i}`} x1={i * 64} y1={0} x2={i * 64} y2={viewHeight} stroke="#22D3EE" strokeWidth="0.5" />
-            ))}
-            {Array.from({ length: Math.ceil(viewHeight / 64) + 1 }, (_, i) => (
-              <line key={`h${i}`} x1={0} y1={i * 64} x2={viewWidth} y2={i * 64} stroke="#22D3EE" strokeWidth="0.5" />
-            ))}
-          </g>
+              <rect
+                x={-GRID_EXTENT}
+                y={-GRID_EXTENT}
+                width={GRID_EXTENT * 2}
+                height={GRID_EXTENT * 2}
+                fill="url(#infinite-grid)"
+              />
 
           <g filter="url(#lens-glow)">
             {lensElements.map((el) => {
+              const isSelected = selectedSurfaceId === el.surfaceId
+              const handleClick = (e: React.MouseEvent) => {
+                e.stopPropagation()
+                onSelectSurface(el.surfaceId)
+              }
               if (el.type === 'glass') {
                 return (
                   <path
                     key={el.key}
                     d={el.path}
-                    fill="rgba(34, 211, 238, 0.2)"
+                    fill={isSelected ? 'rgba(34, 211, 238, 0.3)' : 'rgba(34, 211, 238, 0.2)'}
                     stroke="#22D3EE"
-                    strokeWidth="1.5"
-                    strokeOpacity="0.8"
-                    style={{ filter: 'drop-shadow(0 0 6px rgba(34, 211, 238, 0.4))' }}
+                    strokeWidth={isSelected ? 2 : 1.5}
+                    strokeOpacity={isSelected ? 1 : 0.8}
+                    strokeDasharray={isSelected ? '4 2' : undefined}
+                    style={{
+                      filter: isSelected
+                        ? 'drop-shadow(0 0 12px rgba(34, 211, 238, 0.8))'
+                        : 'drop-shadow(0 0 6px rgba(34, 211, 238, 0.4))',
+                      cursor: 'pointer',
+                    }}
+                    onClick={handleClick}
                   />
                 )
               }
@@ -384,10 +506,13 @@ export function OpticalViewport({
                   <path
                     key={el.key}
                     d={el.path}
-                    fill="rgba(255, 255, 255, 0.03)"
-                    stroke="rgba(148, 163, 184, 0.4)"
-                    strokeWidth="1"
-                    strokeOpacity="0.6"
+                    fill={isSelected ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.03)'}
+                    stroke={isSelected ? '#22D3EE' : 'rgba(148, 163, 184, 0.4)'}
+                    strokeWidth={isSelected ? 1.5 : 1}
+                    strokeOpacity={isSelected ? 0.9 : 0.6}
+                    strokeDasharray={isSelected ? '4 2' : undefined}
+                    style={{ cursor: 'pointer' }}
+                    onClick={handleClick}
                   />
                 )
               }
@@ -397,8 +522,16 @@ export function OpticalViewport({
                   d={el.path}
                   fill="none"
                   stroke="#22D3EE"
-                  strokeWidth="1.5"
-                  strokeOpacity="0.8"
+                  strokeWidth={isSelected ? 2 : 1.5}
+                  strokeOpacity={isSelected ? 1 : 0.8}
+                  strokeDasharray={isSelected ? '4 2' : undefined}
+                  style={{
+                    filter: isSelected
+                      ? 'drop-shadow(0 0 10px rgba(34, 211, 238, 0.9))'
+                      : undefined,
+                    cursor: 'pointer',
+                  }}
+                  onClick={handleClick}
                 />
               )
             })}
@@ -437,6 +570,47 @@ export function OpticalViewport({
             />
           )}
         </svg>
+          </TransformComponent>
+
+          <motion.div
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 glass-card px-3 py-2 rounded-lg"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          >
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => zoomIn()}
+              className="flex items-center justify-center w-9 h-9 rounded-lg transition-colors hover:bg-white/10"
+              aria-label="Zoom In"
+            >
+              <ZoomIn className="w-5 h-5 text-cyan-electric" strokeWidth={2} />
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => zoomOut()}
+              className="flex items-center justify-center w-9 h-9 rounded-lg transition-colors hover:bg-white/10"
+              aria-label="Zoom Out"
+            >
+              <ZoomOut className="w-5 h-5 text-cyan-electric" strokeWidth={2} />
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleResetView}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric transition-colors hover:bg-white/10"
+              aria-label="Reset View"
+            >
+              <Maximize2 className="w-4 h-4" strokeWidth={2} />
+              Reset View
+            </motion.button>
+          </motion.div>
+            </>
+            )
+          }}
+        </TransformWrapper>
       </div>
     </div>
   )

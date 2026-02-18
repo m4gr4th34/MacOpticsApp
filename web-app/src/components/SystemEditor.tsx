@@ -186,6 +186,7 @@ type SurfaceRowProps = {
   isCustomMode: boolean
   canRemove: boolean
   inputClass: string
+  rowRef: (el: HTMLTableRowElement | null) => void
   MaterialSelect: React.ComponentType<{
     surface: Surface
     isCustomMode: boolean
@@ -206,12 +207,14 @@ function SurfaceRow({
   isCustomMode,
   canRemove,
   inputClass,
+  rowRef,
   MaterialSelect,
 }: SurfaceRowProps) {
   const controls = useDragControls()
 
   return (
     <Reorder.Item
+      ref={rowRef}
       value={surface}
       as="tr"
       dragListener={false}
@@ -383,6 +386,15 @@ export function SystemEditor({
   const [toast, setToast] = useState<string | null>(null)
   const [hoveredInsertId, setHoveredInsertId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const rowRefsMap = useRef<Map<string, HTMLTableRowElement>>(new Map())
+
+  useEffect(() => {
+    if (!selectedSurfaceId) return
+    const row = rowRefsMap.current.get(selectedSurfaceId)
+    if (row) {
+      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [selectedSurfaceId])
 
   useEffect(() => {
     if (!toast) return
@@ -640,6 +652,10 @@ export function SystemEditor({
                     isCustomMode={customMaterialIds.has(s.id)}
                     canRemove={surfaces.length > 1}
                     inputClass={inputClass}
+                    rowRef={(el) => {
+                      if (el) rowRefsMap.current.set(s.id, el)
+                      else rowRefsMap.current.delete(s.id)
+                    }}
                     MaterialSelect={MaterialSelect}
                   />,
                   <motion.tr

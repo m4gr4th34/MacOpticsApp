@@ -99,6 +99,8 @@ function App() {
             <Canvas
               systemState={systemState}
               onSystemStateChange={onSystemStateChange}
+              selectedSurfaceId={selectedSurfaceId}
+              onSelectSurface={setSelectedSurfaceId}
             />
           )}
           {activeTab === 'system' && (

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import { OpticalViewport } from './OpticalViewport'
 import {
   DEFAULT_SYSTEM_STATE,
@@ -49,6 +49,8 @@ describe('OpticalViewport', () => {
       <OpticalViewport
         systemState={systemState}
         onSystemStateChange={onSystemStateChange}
+        selectedSurfaceId={null}
+        onSelectSurface={() => {}}
       />
     )
 
@@ -68,6 +70,8 @@ describe('OpticalViewport', () => {
       <OpticalViewport
         systemState={updatedState}
         onSystemStateChange={onSystemStateChange}
+        selectedSurfaceId={null}
+        onSelectSurface={() => {}}
       />
     )
 
