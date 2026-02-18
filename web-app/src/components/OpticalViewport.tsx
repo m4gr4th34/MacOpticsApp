@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import { Play, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
@@ -161,6 +161,29 @@ export function OpticalViewport({
   onSelectSurface,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
+  const [isPanning, setIsPanning] = useState(false)
+  const [isSpaceHeld, setIsSpaceHeld] = useState(false)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault()
+        setIsSpaceHeld(true)
+      }
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault()
+        setIsSpaceHeld(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
   const numRays = systemState.numRays
   const hasTraced = systemState.hasTraced
   const traceResult = systemState.traceResult
@@ -393,11 +416,14 @@ export function OpticalViewport({
           panning={{
             disabled: false,
             velocityDisabled: true,
-            allowLeftClickPan: false,
+            allowLeftClickPan: true,
             allowMiddleClickPan: true,
             allowRightClickPan: false,
             activationKeys: [' '],
+            excluded: [],
           }}
+          onPanningStart={() => setIsPanning(true)}
+          onPanningStop={() => setIsPanning(false)}
           zoomAnimation={{
             animationTime: 200,
             animationType: 'easeOut',
@@ -422,7 +448,12 @@ export function OpticalViewport({
             return (
               <>
           <TransformComponent
-            wrapperStyle={{ width: '100%', height: '100%', minHeight: '320px' }}
+            wrapperStyle={{
+              width: '100%',
+              height: '100%',
+              minHeight: '320px',
+              cursor: isPanning ? 'grabbing' : isSpaceHeld ? 'grab' : 'default',
+            }}
             contentStyle={{ width: '100%', height: '100%', minHeight: '320px' }}
           >
             <svg
