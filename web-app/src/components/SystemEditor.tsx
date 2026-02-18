@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Plus, Trash2, Download, Upload } from 'lucide-react'
+import { motion, Reorder, useDragControls } from 'framer-motion'
+import { Plus, Trash2, Download, Upload, GripVertical } from 'lucide-react'
 import type { SystemState, Surface } from '../types/system'
 import {
   MATERIAL_PRESETS,
@@ -170,6 +170,132 @@ function normalizeSurface(s: Partial<Surface> & { n?: number }, _index: number):
     material: String(s.material ?? 'Air'),
     description: String(s.description ?? ''),
   }
+}
+
+type SurfaceRowProps = {
+  surface: Surface
+  index: number
+  isSelected: boolean
+  onSelect: () => void
+  onUpdate: (partial: Partial<Surface>) => void
+  onRemove: () => void
+  onMaterialUpdate: (n: number, material: string, type: 'Glass' | 'Air') => void
+  onSetCustomMode: (custom: boolean) => void
+  isCustomMode: boolean
+  canRemove: boolean
+  inputClass: string
+  MaterialSelect: React.ComponentType<{
+    surface: Surface
+    isCustomMode: boolean
+    onUpdate: (n: number, material: string, type: 'Glass' | 'Air') => void
+    onSetCustomMode: (custom: boolean) => void
+  }>
+}
+
+function SurfaceRow({
+  surface,
+  index,
+  isSelected,
+  onSelect,
+  onUpdate,
+  onRemove,
+  onMaterialUpdate,
+  onSetCustomMode,
+  isCustomMode,
+  canRemove,
+  inputClass,
+  MaterialSelect,
+}: SurfaceRowProps) {
+  const controls = useDragControls()
+
+  return (
+    <Reorder.Item
+      value={surface}
+      as="tr"
+      dragListener={false}
+      dragControls={controls}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      className={`relative cursor-pointer transition-colors ${
+        isSelected ? 'bg-cyan-electric/20 ring-1 ring-cyan-electric/50' : 'hover:bg-white/5'
+      }`}
+      style={{ position: 'relative' }}
+      whileDrag={{
+        scale: 1.02,
+        boxShadow: '0 12px 40px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(34, 211, 238, 0.2)',
+        backgroundColor: 'rgba(15, 23, 42, 0.85)',
+        zIndex: 50,
+      }}
+      onClick={(e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest('input, button, select, [data-drag-handle]')) return
+        onSelect()
+      }}
+    >
+      <td
+        className="w-10 px-2 py-2 text-slate-500 cursor-grab active:cursor-grabbing"
+        data-drag-handle
+        onPointerDown={(e) => controls.start(e)}
+      >
+        <GripVertical className="w-4 h-4" strokeWidth={2} />
+      </td>
+      <td className="px-4 py-3 text-slate-400 font-mono text-sm w-12">{index + 1}</td>
+      <td className="px-4 py-2 w-24">
+        <input
+          type="number"
+          value={surface.radius}
+          onChange={(e) => onUpdate({ radius: Number(e.target.value) || 0 })}
+          className={inputClass}
+          step={1}
+        />
+      </td>
+      <td className="px-4 py-2 w-28">
+        <input
+          type="number"
+          value={surface.thickness}
+          onChange={(e) => onUpdate({ thickness: Number(e.target.value) || 0 })}
+          className={inputClass}
+          min={0}
+          step={0.1}
+        />
+      </td>
+      <td className="px-4 py-2 w-36">
+        <MaterialSelect
+          surface={surface}
+          isCustomMode={isCustomMode}
+          onUpdate={onMaterialUpdate}
+          onSetCustomMode={onSetCustomMode}
+        />
+      </td>
+      <td className="px-4 py-2 w-24">
+        <input
+          type="number"
+          value={surface.diameter}
+          onChange={(e) => onUpdate({ diameter: Number(e.target.value) || 0 })}
+          className={inputClass}
+          min={0}
+          step={0.5}
+        />
+      </td>
+      <td className="px-4 py-2 flex-1">
+        <input
+          type="text"
+          value={surface.description}
+          onChange={(e) => onUpdate({ description: e.target.value })}
+          className={inputClass}
+          placeholder="Optional notes..."
+        />
+      </td>
+      <td className="px-4 py-2 w-12">
+        <button
+          onClick={onRemove}
+          disabled={!canRemove}
+          className="p-2 rounded text-slate-500 hover:text-red-400 hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-slate-500"
+          aria-label="Remove surface"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </td>
+    </Reorder.Item>
+  )
 }
 
 /** Create a new surface with unique ID. Defaults to Air (n=1.0) so the physics engine knows the ray medium. */
@@ -348,7 +474,17 @@ export function SystemEditor({
     onSelectSurface(newSurface.id)
   }
 
+  const handleReorder = (newSurfaces: Surface[]) => {
+    onSystemStateChange((prev) => ({
+      ...prev,
+      surfaces: newSurfaces,
+      traceResult: null,
+      traceError: null,
+    }))
+  }
+
   const columns = [
+    { key: 'grip', label: '', width: 'w-10' },
     { key: 'num', label: '#', width: 'w-12' },
     { key: 'radius', label: 'Radius (mm)', width: 'w-24' },
     { key: 'thickness', label: 'Thickness (mm)', width: 'w-28' },
@@ -421,115 +557,48 @@ export function SystemEditor({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <Reorder.Group
+              as="tbody"
+              axis="y"
+              values={surfaces}
+              onReorder={handleReorder}
+              className="divide-y divide-white/5"
+            >
               {surfaces.flatMap((s, i) => {
                 const insertIndex = i + 1
                 const isHovered = hoveredInsertIndex === insertIndex
                 return [
-                  <motion.tr
+                  <SurfaceRow
                     key={s.id}
-                    layout
-                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).closest('input, button, select')) return
-                      onSelectSurface(s.id)
+                    surface={s}
+                    index={i}
+                    isSelected={selectedSurfaceId === s.id}
+                    onSelect={() => onSelectSurface(s.id)}
+                    onUpdate={(partial) => updateSurface(i, partial)}
+                    onRemove={() => removeSurface(i)}
+                    onMaterialUpdate={(n, material, type) =>
+                      updateMaterial(i, n, material, type)
+                    }
+                    onSetCustomMode={(custom) => {
+                      setCustomMaterialIds((prev) => {
+                        const next = new Set(prev)
+                        if (custom) next.add(s.id)
+                        else next.delete(s.id)
+                        return next
+                      })
                     }}
-                    className={`cursor-pointer transition-colors ${
-                      selectedSurfaceId === s.id
-                        ? 'bg-cyan-electric/20 ring-1 ring-cyan-electric/50'
-                        : 'hover:bg-white/5'
-                    }`}
-                  >
-                    <td className="px-4 py-3 text-slate-400 font-mono text-sm">
-                      {i + 1}
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        value={s.radius}
-                        onChange={(e) =>
-                          updateSurface(i, {
-                            radius: Number(e.target.value) || 0,
-                          })
-                        }
-                        className={inputClass}
-                        step={1}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        value={s.thickness}
-                        onChange={(e) =>
-                          updateSurface(i, {
-                            thickness: Number(e.target.value) || 0,
-                          })
-                        }
-                        className={inputClass}
-                        min={0}
-                        step={0.1}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <MaterialSelect
-                        surface={s}
-                        isCustomMode={customMaterialIds.has(s.id)}
-                        onUpdate={(n, material, type) =>
-                          updateMaterial(i, n, material, type)
-                        }
-                        onSetCustomMode={(custom) => {
-                          setCustomMaterialIds((prev) => {
-                            const next = new Set(prev)
-                            if (custom) next.add(s.id)
-                            else next.delete(s.id)
-                            return next
-                          })
-                        }}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        value={s.diameter}
-                        onChange={(e) =>
-                          updateSurface(i, {
-                            diameter: Number(e.target.value) || 0,
-                          })
-                        }
-                        className={inputClass}
-                        min={0}
-                        step={0.5}
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        value={s.description}
-                        onChange={(e) =>
-                          updateSurface(i, { description: e.target.value })
-                        }
-                        className={inputClass}
-                        placeholder="Optional notes..."
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <button
-                        onClick={() => removeSurface(i)}
-                        disabled={surfaces.length <= 1}
-                        className="p-2 rounded text-slate-500 hover:text-red-400 hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-slate-500"
-                        aria-label="Remove surface"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </motion.tr>,
+                    isCustomMode={customMaterialIds.has(s.id)}
+                    canRemove={surfaces.length > 1}
+                    inputClass={inputClass}
+                    MaterialSelect={MaterialSelect}
+                  />,
                   <motion.tr
                     key={`insert-${insertIndex}`}
                     layout
                     transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   >
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="p-0 align-middle"
                       onMouseEnter={() => setHoveredInsertIndex(insertIndex)}
                       onMouseLeave={() => setHoveredInsertIndex(null)}
@@ -570,7 +639,7 @@ export function SystemEditor({
                   </motion.tr>,
                 ]
               })}
-            </tbody>
+            </Reorder.Group>
           </table>
         </div>
       </div>
