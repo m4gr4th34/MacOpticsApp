@@ -83,6 +83,8 @@ export type MonteCarloResponse = {
   rmsSpread?: number
   numValid?: number
   error?: string
+  /** Per-surface RMS when that surface alone is jittered (sensitivity heatmap) */
+  sensitivityBySurface?: number[]
 }
 
 export async function runMonteCarlo(optical_stack: {

@@ -13,6 +13,53 @@ import { traceOpticalStack, runMonteCarlo, type MonteCarloResponse } from '../ap
 import { config } from '../config'
 import { computeDispersion } from '../lib/dispersion'
 
+/** Render Monte Carlo point cloud with color-coded ghost points.
+ * Cyan = within 1σ (in spec), Red = outliers (would fail performance test). */
+function renderMonteCarloCloud(
+  spots: [number, number][],
+  opts: {
+    centerX: number
+    centerY: number
+    scale: number
+    dotRadius?: number
+    inSpecOpacity?: number
+    outlierOpacity?: number
+  }
+): { dots: React.ReactNode; inSpecCount: number; outlierCount: number } {
+  const { centerX, centerY, scale, dotRadius = 1.2, inSpecOpacity = 0.5, outlierOpacity = 0.6 } = opts
+  if (!spots.length) return { dots: null, inSpecCount: 0, outlierCount: 0 }
+
+  const cx = spots.reduce((s, [x]) => s + x, 0) / spots.length
+  const cy = spots.reduce((s, [, y]) => s + y, 0) / spots.length
+  const distances = spots.map(([x, y]) => Math.sqrt((x - cx) ** 2 + (y - cy) ** 2))
+  const meanD = distances.reduce((a, b) => a + b, 0) / distances.length
+  const variance = distances.reduce((s, d) => s + (d - meanD) ** 2, 0) / distances.length
+  const sigma = Math.sqrt(variance) || 0.001
+
+  let inSpecCount = 0
+  let outlierCount = 0
+  const dots = spots.map(([sx, sy], i) => {
+    const d = distances[i]
+    const isOutlier = d > sigma
+    if (isOutlier) outlierCount++
+    else inSpecCount++
+    const px = centerX + sx * scale
+    const py = centerY - sy * scale
+    return (
+      <circle
+        key={i}
+        cx={px}
+        cy={py}
+        r={dotRadius}
+        fill={isOutlier ? 'rgba(239, 68, 68, 0.85)' : 'rgba(34, 211, 238, 0.85)'}
+        opacity={isOutlier ? outlierOpacity : inSpecOpacity}
+      />
+    )
+  })
+
+  return { dots, inSpecCount, outlierCount }
+}
+
 /** Through-Focus diagnostic: 10mm sparkline around cursor with Gold Diamond minimum line.
  * If the dip doesn't align with the dotted line → search algorithm failure. */
 function ThroughFocusSparkline({
@@ -475,6 +522,8 @@ type OpticalViewportProps = {
   snapToSurface?: boolean
   /** Ref to trigger 10-iteration sample analysis from InfoPanel */
   runSampleAnalysisRef?: React.MutableRefObject<(() => void) | null>
+  /** Callback when Monte Carlo completes with per-surface sensitivity */
+  onMonteCarloSensitivity?: (sensitivity: number[] | null) => void
 }
 
 export function OpticalViewport({
@@ -489,6 +538,7 @@ export function OpticalViewport({
   snapToFocus = true,
   snapToSurface = true,
   runSampleAnalysisRef,
+  onMonteCarloSensitivity,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
   const [isMonteCarloRunning, setIsMonteCarloRunning] = useState(false)
@@ -647,8 +697,10 @@ export function OpticalViewport({
       })
       if (res.error) {
         onSystemStateChange((prev) => ({ ...prev, traceError: res.error ?? null }))
+        onMonteCarloSensitivity?.(null)
       } else {
         setMonteCarloResult(res)
+        onMonteCarloSensitivity?.(res.sensitivityBySurface ?? null)
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Monte Carlo failed'
@@ -670,7 +722,8 @@ export function OpticalViewport({
   // Clear Monte Carlo result when system changes
   useEffect(() => {
     setMonteCarloResult(null)
-  }, [systemState.surfaces, systemState.entrancePupilDiameter, systemState.numRays])
+    onMonteCarloSensitivity?.(null)
+  }, [systemState.surfaces, systemState.entrancePupilDiameter, systemState.numRays, onMonteCarloSensitivity])
 
   // Run trace when surfaces were reordered (pendingTrace set on drop)
   useEffect(() => {
@@ -1071,7 +1124,7 @@ export function OpticalViewport({
         <motion.button
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.98 }}
-          onClick={handleMonteCarlo}
+          onClick={() => handleMonteCarlo()}
           disabled={isMonteCarloRunning}
           title="Run Monte Carlo (100 iterations with tolerance jitter) — set R±, T±, Tilt± in System Editor"
           className="flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-cyan-electric/50 hover:bg-cyan-electric/15 text-cyan-electric"
@@ -1462,61 +1515,57 @@ export function OpticalViewport({
           ))}
 
           {/* Monte Carlo spot diagram (point cloud) at image plane */}
-          {monteCarloResult?.spots?.length && bestFocusSvgX != null && (
-            <g key="monte-carlo-spot">
-              <defs>
-                <clipPath id="spot-diagram-clip">
-                  <rect x={bestFocusSvgX + 12} y={cy - 44} width={88} height={88} rx={4} />
-                </clipPath>
-              </defs>
-              <rect
-                x={bestFocusSvgX + 12}
-                y={cy - 44}
-                width={88}
-                height={88}
-                rx={4}
-                fill="rgba(15, 23, 42, 0.85)"
-                stroke="rgba(34, 211, 238, 0.5)"
-                strokeWidth="1"
-              />
-              <g clipPath="url(#spot-diagram-clip)">
-                {monteCarloResult.spots.map(([sx, sy], i) => {
-                  const spotScale = 60
-                  const cx_spot = bestFocusSvgX + 56
-                  const cy_spot = cy
-                  const px = cx_spot + sx * spotScale
-                  const py = cy_spot - sy * spotScale
-                  return (
-                    <circle
-                      key={i}
-                      cx={px}
-                      cy={py}
-                      r="1"
-                      fill="rgba(34, 211, 238, 0.4)"
-                    />
-                  )
-                })}
+          {monteCarloResult?.spots?.length && bestFocusSvgX != null && (() => {
+            const spotScale = 60
+            const cx_spot = bestFocusSvgX + 56
+            const cy_spot = cy
+            const { dots } = renderMonteCarloCloud(monteCarloResult.spots, {
+              centerX: cx_spot,
+              centerY: cy_spot,
+              scale: spotScale,
+              dotRadius: 1.2,
+              inSpecOpacity: 0.5,
+              outlierOpacity: 0.6,
+            })
+            return (
+              <g key="monte-carlo-spot">
+                <defs>
+                  <clipPath id="spot-diagram-clip">
+                    <rect x={bestFocusSvgX + 12} y={cy - 44} width={88} height={88} rx={4} />
+                  </clipPath>
+                </defs>
+                <rect
+                  x={bestFocusSvgX + 12}
+                  y={cy - 44}
+                  width={88}
+                  height={88}
+                  rx={4}
+                  fill="rgba(15, 23, 42, 0.85)"
+                  stroke="rgba(34, 211, 238, 0.5)"
+                  strokeWidth="1"
+                />
+                <g clipPath="url(#spot-diagram-clip)">{dots}</g>
+                <text
+                  x={bestFocusSvgX + 56}
+                  y={cy - 32}
+                  textAnchor="middle"
+                  fill="#94a3b8"
+                  fontSize={9}
+                >
+                  {`Spot (n=${monteCarloResult.numValid ?? 0})`}
+                </text>
+                <text
+                  x={bestFocusSvgX + 56}
+                  y={cy + 38}
+                  textAnchor="middle"
+                  fill="#22D3EE"
+                  fontSize={9}
+                >
+                  {`RMS ${((monteCarloResult.rmsSpread ?? 0) * 1000).toFixed(2)} µm`}
+                </text>
               </g>
-              <text
-                x={bestFocusSvgX + 56}
-                y={cy - 32}
-                textAnchor="middle"
-                fill="#94a3b8"
-                fontSize={9}
-              >
-                {`Spot (n=${monteCarloResult.numValid ?? 0})`}
-              </text>
-              <text
-                x={bestFocusSvgX + 56}
-                y={cy + 38}
-                textAnchor="middle"
-                fill="#22D3EE"
-                fontSize={9}
-              >
-                {`RMS ${((monteCarloResult.rmsSpread ?? 0) * 1000).toFixed(2)} µm`}
-              </text>
-            </g>
-          )}
+            )
+          })()}
 
           <AnimatePresence>
             {showBestFocus && bestFocusSvgX != null && hasTraced && totalRays > 0 && (
@@ -1629,6 +1678,27 @@ export function OpticalViewport({
               Reset View
             </motion.button>
           </motion.div>
+
+          {monteCarloResult?.spots?.length && (
+            <motion.div
+              className="absolute bottom-4 right-4 z-[5] px-3 py-2 rounded-lg text-xs pointer-events-none bg-slate-900/70 backdrop-blur-md border border-cyan-electric/30"
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="font-medium text-cyan-electric/90 mb-1.5">Monte Carlo Yield Map</div>
+              <div className="flex items-center gap-3 text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-cyan-electric/60" />
+                  Within 1σ
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500/80" />
+                  Outliers
+                </span>
+              </div>
+            </motion.div>
+          )}
 
           <motion.div
             className="absolute bottom-0 left-0 z-[5] ml-5 mb-5 px-4 py-2 rounded-full text-xs text-slate-300 pointer-events-none bg-slate-900/50 backdrop-blur-[8px] border border-white/10"

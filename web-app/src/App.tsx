@@ -78,10 +78,15 @@ function App() {
   const [snapToFocus, setSnapToFocus] = useState(true)
   const [snapToSurface, setSnapToSurface] = useState(true)
   const runSampleAnalysisRef = useRef<(() => void) | null>(null)
+  const [sensitivityBySurface, setSensitivityBySurface] = useState<number[] | null>(null)
   const [systemState, setSystemState] = useState<SystemState>(() => {
     const loaded = loadLastDesign()
     return loaded ?? { ...DEFAULT_SYSTEM_STATE, ...computePerformance(DEFAULT_SYSTEM_STATE) }
   })
+
+  useEffect(() => {
+    setSensitivityBySurface(null)
+  }, [systemState.surfaces])
 
   useEffect(() => {
     const toSave = {
@@ -129,6 +134,7 @@ function App() {
               showBestFocus={showBestFocus}
               snapToFocus={snapToFocus}
               snapToSurface={snapToSurface}
+              onMonteCarloSensitivity={setSensitivityBySurface}
             />
           )}
           {activeTab === 'system' && (
@@ -138,6 +144,7 @@ function App() {
               onLoadComplete={setLoadedFileName}
               selectedSurfaceId={selectedSurfaceId}
               onSelectSurface={setSelectedSurfaceId}
+              sensitivityBySurface={sensitivityBySurface}
             />
           )}
           {activeTab === 'info' && (
@@ -162,6 +169,7 @@ function App() {
                   snapToFocus={snapToFocus}
                   snapToSurface={snapToSurface}
                   runSampleAnalysisRef={runSampleAnalysisRef}
+                  onMonteCarloSensitivity={setSensitivityBySurface}
                 />
               </div>
             </div>

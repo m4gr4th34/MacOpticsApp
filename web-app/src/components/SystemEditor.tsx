@@ -27,6 +27,8 @@ type SystemEditorProps = {
   onLoadComplete?: (fileName: string) => void
   selectedSurfaceId: string | null
   onSelectSurface: (id: string | null) => void
+  /** Per-surface sensitivity from Monte Carlo (higher = more failure impact) */
+  sensitivityBySurface?: number[] | null
 }
 
 const inputClass =
@@ -141,14 +143,28 @@ function MaterialCombobox({
   )
 }
 
+/** Indices of surfaces with highest sensitivity (for heatmap highlight) */
+function getHighSensitivityIndices(sensitivityBySurface: number[] | null | undefined): Set<number> {
+  if (!sensitivityBySurface?.length) return new Set()
+  const maxVal = Math.max(...sensitivityBySurface)
+  if (maxVal <= 0) return new Set()
+  const indices = new Set<number>()
+  sensitivityBySurface.forEach((v, i) => {
+    if (v >= maxVal * 0.9) indices.add(i)
+  })
+  return indices
+}
+
 export function SystemEditor({
   systemState,
   onSystemStateChange,
   onLoadComplete: _onLoadComplete, // Reserved for load/save design
   selectedSurfaceId,
   onSelectSurface,
+  sensitivityBySurface,
 }: SystemEditorProps) {
   const surfaces = systemState.surfaces
+  const highSensitivityIndices = getHighSensitivityIndices(sensitivityBySurface)
 
   const addSurfaceAtStart = () => addSurfaceAtIndex(0)
 
@@ -257,20 +273,35 @@ export function SystemEditor({
                 </span>
               </td>
             </tr>
-            {surfaces.map((s, i) => (
+            {surfaces.map((s, i) => {
+              const isHighSensitivity = highSensitivityIndices.has(i)
+              return (
               <Draggable key={s.id} draggableId={s.id} index={i}>
                 {(provided, snapshot) => (
-                <tr
+                <motion.tr
                   ref={provided.innerRef}
                   {...provided.draggableProps}
                   onClick={() => onSelectSurface(s.id)}
-                  className={`border-b border-white/10 cursor-pointer transition-all bg-slate-900/30 backdrop-blur-[4px] ${
+                  title={isHighSensitivity ? 'High Sensitivity: Consider tightening tolerances or choosing a different glass type here' : undefined}
+                  className={`border-b border-white/10 cursor-pointer transition-all backdrop-blur-[4px] ${
                     snapshot.isDragging ? 'opacity-90 shadow-lg' : ''
                   } ${
                     selectedSurfaceId === s.id
                       ? 'border-l-4 border-l-cyan-electric bg-slate-900/50'
                       : 'border-l-4 border-l-transparent hover:bg-slate-900/50'
-                  }`}
+                  } ${isHighSensitivity ? 'bg-red-500/10' : 'bg-slate-900/30'}`}
+                  animate={isHighSensitivity ? {
+                    backgroundColor: [
+                      'rgba(239, 68, 68, 0.08)',
+                      'rgba(239, 68, 68, 0.18)',
+                      'rgba(239, 68, 68, 0.08)',
+                    ],
+                  } : {}}
+                  transition={isHighSensitivity ? {
+                    duration: 2.5,
+                    repeat: Infinity,
+                    repeatType: 'reverse',
+                  } : {}}
                 >
                 <td
                   {...provided.dragHandleProps}
@@ -469,10 +500,11 @@ export function SystemEditor({
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </td>
-              </tr>
+              </motion.tr>
                 )}
               </Draggable>
-            ))}
+            );
+            })}
             {provided.placeholder}
             <tr
               data-testid="insert-surface-at-end"
