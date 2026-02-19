@@ -49,6 +49,8 @@ export type SystemState = {
   // Backend trace result (z,y coords)
   traceResult: TraceResult | null
   traceError: string | null
+  /** Set when surfaces are reordered; triggers trace on next Lens/Info tab view */
+  pendingTrace?: boolean
 }
 
 /** Compute performance metrics from system state (prefer trace result when available) */

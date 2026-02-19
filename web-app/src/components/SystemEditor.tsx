@@ -1,6 +1,7 @@
-import { Fragment, useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, GripVertical, Plus, Trash2 } from 'lucide-react'
 import type { SystemState, Surface } from '../types/system'
 import { config } from '../config'
 
@@ -140,47 +141,6 @@ function MaterialCombobox({
   )
 }
 
-function InsertBetweenRow({
-  index,
-  onInsert,
-}: {
-  index: number
-  onInsert: (index: number) => void
-}) {
-  const [isHovered, setIsHovered] = useState(false)
-  return (
-    <tr
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="relative border-0 bg-slate-900/20 backdrop-blur-[4px] hover:bg-slate-900/40 transition-colors"
-    >
-      <td colSpan={8} className="relative p-0 align-middle bg-slate-900/20 backdrop-blur-[4px]">
-        <div className="relative flex items-center justify-center min-h-[12px] py-0.5">
-          <AnimatePresence>
-            {isHovered && (
-              <motion.button
-                type="button"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.15 }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onInsert(index)
-                }}
-                className="absolute z-10 flex items-center justify-center w-7 h-7 rounded-full bg-cyan-electric/90 text-slate-900 shadow-[0_0_12px_rgba(34,211,238,0.6)] hover:bg-cyan-electric hover:shadow-[0_0_16px_rgba(34,211,238,0.8)] transition-all"
-                aria-label={`Insert surface at position ${index + 1}`}
-              >
-                <Plus className="w-4 h-4" strokeWidth={2.5} />
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </div>
-      </td>
-    </tr>
-  )
-}
-
 export function SystemEditor({
   systemState,
   onSystemStateChange,
@@ -237,13 +197,33 @@ export function SystemEditor({
     }))
   }
 
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination || result.source.index === result.destination.index) return
+    const from = result.source.index
+    const to = result.destination.index
+    onSystemStateChange((prev) => {
+      const next = [...prev.surfaces]
+      const [removed] = next.splice(from, 1)
+      next.splice(to, 0, removed)
+      return {
+        ...prev,
+        surfaces: next,
+        traceResult: null,
+        traceError: null,
+        pendingTrace: true,
+      }
+    })
+  }
+
   return (
     <div className="p-4">
       <h2 className="text-cyan-electric font-semibold text-lg mb-4">System Editor</h2>
       <div className="overflow-x-auto rounded-lg overflow-hidden">
+        <DragDropContext onDragEnd={onDragEnd}>
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="text-left text-slate-400 border-b border-white/10 bg-slate-900/40 backdrop-blur-[4px]">
+              <th className="w-8 py-2 pr-1" aria-label="Drag handle" />
               <th className="py-2 pr-4">#</th>
               <th className="py-2 pr-4">Type</th>
               <th className="py-2 pr-4">Radius (mm)</th>
@@ -254,13 +234,18 @@ export function SystemEditor({
               <th className="py-2 w-10" />
             </tr>
           </thead>
-          <tbody>
+          <Droppable droppableId="surfaces">
+            {(provided) => (
+          <tbody
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+          >
             <tr
               data-testid="insert-surface-at-start"
               onClick={addSurfaceAtStart}
               className="border-b border-dashed border-white/20 cursor-pointer bg-slate-900/30 backdrop-blur-[4px] hover:bg-slate-900/50 text-slate-500 hover:text-cyan-electric transition-colors"
             >
-              <td colSpan={8} className="py-2">
+              <td colSpan={9} className="py-2">
                 <span className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   Insert surface at start
@@ -268,18 +253,27 @@ export function SystemEditor({
               </td>
             </tr>
             {surfaces.map((s, i) => (
-              <Fragment key={s.id}>
-                {i > 0 && (
-                  <InsertBetweenRow index={i} onInsert={addSurfaceAtIndex} />
-                )}
+              <Draggable key={s.id} draggableId={s.id} index={i}>
+                {(provided, snapshot) => (
                 <tr
-                onClick={() => onSelectSurface(s.id)}
-                className={`border-b border-white/10 cursor-pointer transition-all bg-slate-900/30 backdrop-blur-[4px] ${
-                  selectedSurfaceId === s.id
-                    ? 'border-l-4 border-l-cyan-electric bg-slate-900/50'
-                    : 'border-l-4 border-l-transparent hover:bg-slate-900/50'
-                }`}
-              >
+                  ref={provided.innerRef}
+                  {...provided.draggableProps}
+                  onClick={() => onSelectSurface(s.id)}
+                  className={`border-b border-white/10 cursor-pointer transition-all bg-slate-900/30 backdrop-blur-[4px] ${
+                    snapshot.isDragging ? 'opacity-90 shadow-lg' : ''
+                  } ${
+                    selectedSurfaceId === s.id
+                      ? 'border-l-4 border-l-cyan-electric bg-slate-900/50'
+                      : 'border-l-4 border-l-transparent hover:bg-slate-900/50'
+                  }`}
+                >
+                <td
+                  {...provided.dragHandleProps}
+                  className="py-2 pr-1 text-slate-500 hover:text-cyan-electric cursor-grab active:cursor-grabbing"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <GripVertical className="w-4 h-4" />
+                </td>
                 <td className="py-2 pr-4 text-slate-400">{i + 1}</td>
                 <td className="py-2 pr-4">
                   <div className="flex gap-1">
@@ -384,10 +378,27 @@ export function SystemEditor({
                   </button>
                 </td>
               </tr>
-              </Fragment>
+                )}
+              </Draggable>
             ))}
+            {provided.placeholder}
+            <tr
+              data-testid="insert-surface-at-end"
+              onClick={() => addSurfaceAtIndex(surfaces.length)}
+              className="border-b border-dashed border-white/20 cursor-pointer bg-slate-900/30 backdrop-blur-[4px] hover:bg-slate-900/50 text-slate-500 hover:text-cyan-electric transition-colors"
+            >
+              <td colSpan={9} className="py-2">
+                <span className="flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  Insert surface at end
+                </span>
+              </td>
+            </tr>
           </tbody>
+            )}
+          </Droppable>
         </table>
+        </DragDropContext>
       </div>
     </div>
   )

@@ -567,6 +567,13 @@ export function OpticalViewport({
     }
   }, [systemState, onSystemStateChange])
 
+  // Run trace when surfaces were reordered (pendingTrace set on drop)
+  useEffect(() => {
+    if (!systemState.pendingTrace) return
+    onSystemStateChange((prev) => ({ ...prev, pendingTrace: false }))
+    handleTrace()
+  }, [systemState.pendingTrace, onSystemStateChange, handleTrace])
+
   const viewWidth = config.viewport.width
   const viewHeight = config.viewport.height
   const surfaces = systemState.surfaces
@@ -937,6 +944,27 @@ export function OpticalViewport({
         </div>
       )}
 
+      <AnimatePresence>
+        {isTracing && (
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
+            aria-live="polite"
+          >
+            <motion.div
+              key="calculating"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="glass-card px-4 py-2 rounded-lg flex items-center gap-2 text-cyan-electric/90 text-sm"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+              <span>Calculating…</span>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <div
         className="relative overflow-hidden rounded-xl"
         style={{
@@ -1159,8 +1187,16 @@ export function OpticalViewport({
                 strokeWidth="1.2"
                 strokeOpacity="0.9"
                 initial={{ pathLength: 0, opacity: 0 }}
-                animate={{ pathLength: 1, opacity: 0.9 }}
-                transition={{ duration: 0.6, delay: i * 0.03 }}
+                animate={
+                  isTracing
+                    ? { pathLength: 1, opacity: [0.5, 1, 0.5] }
+                    : { pathLength: 1, opacity: 0.9 }
+                }
+                transition={
+                  isTracing
+                    ? { opacity: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } }
+                    : { duration: 0.6, delay: i * 0.03 }
+                }
                 style={{ filter: `drop-shadow(0 0 2px ${ray.color})` }}
               />
             )
