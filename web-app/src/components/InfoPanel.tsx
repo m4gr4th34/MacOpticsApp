@@ -162,9 +162,10 @@ type InfoPanelProps = {
   onHighlightMetric: (m: HighlightedMetric) => void
   onSystemStateChange?: (state: SystemState | ((prev: SystemState) => SystemState)) => void
   onRunSampleAnalysis?: () => void
+  onOpenOptimizer?: () => void
 }
 
-export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateChange, onRunSampleAnalysis }: InfoPanelProps) {
+export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateChange, onRunSampleAnalysis, onOpenOptimizer }: InfoPanelProps) {
   const [openSection, setOpenSection] = useState<SectionId | null>('nav')
 
   return (
@@ -269,6 +270,16 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateC
                         Note: Optimization requires a multi-surface system. For best results, use a doublet configuration (two lenses with different glass types).
                       </p>
                     </div>
+                    {onOpenOptimizer && (
+                      <button
+                        type="button"
+                        onClick={onOpenOptimizer}
+                        title="Click the gradient button in the viewport HUD to run the glass-pairing algorithm."
+                        className="w-full mt-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 transition-colors"
+                      >
+                        Open Optimizer
+                      </button>
+                    )}
                   </div>
                 )}
                 {id === 'montecarlo' && (

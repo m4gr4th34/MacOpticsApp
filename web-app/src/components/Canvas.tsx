@@ -13,6 +13,7 @@ type CanvasProps = {
   snapToFocus?: boolean
   snapToSurface?: boolean
   runSampleAnalysisRef?: React.MutableRefObject<(() => void) | null>
+  pulseOptimizeRef?: React.MutableRefObject<(() => void) | null>
   onMonteCarloSensitivity?: (sensitivity: number[] | null) => void
 }
 
@@ -27,6 +28,7 @@ export function Canvas({
   snapToFocus = true,
   snapToSurface = true,
   runSampleAnalysisRef,
+  pulseOptimizeRef,
   onMonteCarloSensitivity,
 }: CanvasProps) {
   return (
@@ -43,6 +45,7 @@ export function Canvas({
         snapToFocus={snapToFocus}
         snapToSurface={snapToSurface}
         runSampleAnalysisRef={runSampleAnalysisRef}
+        pulseOptimizeRef={pulseOptimizeRef}
         onMonteCarloSensitivity={onMonteCarloSensitivity}
       />
     </div>

@@ -523,6 +523,8 @@ type OpticalViewportProps = {
   snapToSurface?: boolean
   /** Ref to trigger 10-iteration sample analysis from InfoPanel */
   runSampleAnalysisRef?: React.MutableRefObject<(() => void) | null>
+  /** Ref to trigger pulse on Optimize Colors button from InfoPanel */
+  pulseOptimizeRef?: React.MutableRefObject<(() => void) | null>
   /** Callback when Monte Carlo completes with per-surface sensitivity */
   onMonteCarloSensitivity?: (sensitivity: number[] | null) => void
 }
@@ -539,6 +541,7 @@ export function OpticalViewport({
   snapToFocus = true,
   snapToSurface = true,
   runSampleAnalysisRef,
+  pulseOptimizeRef,
   onMonteCarloSensitivity,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
@@ -548,6 +551,7 @@ export function OpticalViewport({
   const [isSpaceHeld, setIsSpaceHeld] = useState(false)
   const [showCausticEnvelope, setShowCausticEnvelope] = useState(false)
   const [showLcaMap, setShowLcaMap] = useState(false)
+  const [pulseOptimizeTrigger, setPulseOptimizeTrigger] = useState(0)
   const [fieldFilter, setFieldFilter] = useState<number | null>(null)
   const [hudTab, setHudTab] = useState<'geometry' | 'ultrafast'>('geometry')
   const [hintVisible, setHintVisible] = useState(false)
@@ -575,6 +579,17 @@ export function OpticalViewport({
       if (hintLeaveTimeoutRef.current) clearTimeout(hintLeaveTimeoutRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!pulseOptimizeRef) return
+    pulseOptimizeRef.current = () => {
+      setShowLcaMap(true)
+      setPulseOptimizeTrigger((n) => n + 1)
+    }
+    return () => {
+      pulseOptimizeRef.current = null
+    }
+  }, [pulseOptimizeRef])
 
   const handleViewportMouseEnter = useCallback(() => {
     if (hintLeaveTimeoutRef.current) {
@@ -1253,6 +1268,7 @@ export function OpticalViewport({
           <ChromaticAberrationOverlay
             systemState={systemState}
             onSystemStateChange={onSystemStateChange}
+            pulseOptimizeTrigger={pulseOptimizeTrigger}
           />
         )}
         <TransformWrapper

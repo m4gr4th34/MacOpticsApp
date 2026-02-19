@@ -43,9 +43,10 @@ function wavelengthToColor(nm: number): string {
 type ChromaticAberrationOverlayProps = {
   systemState: SystemState
   onSystemStateChange: (state: SystemState | ((prev: SystemState) => SystemState)) => void
+  pulseOptimizeTrigger?: number
 }
 
-export function ChromaticAberrationOverlay({ systemState, onSystemStateChange }: ChromaticAberrationOverlayProps) {
+export function ChromaticAberrationOverlay({ systemState, onSystemStateChange, pulseOptimizeTrigger = 0 }: ChromaticAberrationOverlayProps) {
   const [data, setData] = useState<ChromaticShiftPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -371,6 +372,23 @@ export function ChromaticAberrationOverlay({ systemState, onSystemStateChange }:
         onClick={handleOptimize}
         disabled={optimizeLoading || systemState.surfaces.length !== 2}
         className="w-full py-2 px-3 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+        animate={
+          pulseOptimizeTrigger > 0
+            ? {
+                scale: [1, 1.05, 1],
+                boxShadow: [
+                  '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                  '0 0 24px 4px rgba(34, 211, 238, 0.6)',
+                  '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                ],
+              }
+            : undefined
+        }
+        transition={
+          pulseOptimizeTrigger > 0
+            ? { duration: 1.2, repeat: 2, ease: 'easeInOut' }
+            : undefined
+        }
       >
         {optimizeLoading ? (
           <span className="flex items-center justify-center gap-2">

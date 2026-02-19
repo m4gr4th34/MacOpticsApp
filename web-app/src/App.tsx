@@ -78,6 +78,7 @@ function App() {
   const [snapToFocus, setSnapToFocus] = useState(true)
   const [snapToSurface, setSnapToSurface] = useState(true)
   const runSampleAnalysisRef = useRef<(() => void) | null>(null)
+  const pulseOptimizeRef = useRef<(() => void) | null>(null)
   const [sensitivityBySurface, setSensitivityBySurface] = useState<number[] | null>(null)
   const [systemState, setSystemState] = useState<SystemState>(() => {
     const loaded = loadLastDesign()
@@ -155,6 +156,7 @@ function App() {
                   onHighlightMetric={setHighlightedMetric}
                   onSystemStateChange={onSystemStateChange}
                   onRunSampleAnalysis={() => runSampleAnalysisRef.current?.()}
+                  onOpenOptimizer={() => pulseOptimizeRef.current?.()}
                 />
               </div>
               <div className="flex-1 min-w-0 min-h-[400px]">
@@ -169,6 +171,7 @@ function App() {
                   snapToFocus={snapToFocus}
                   snapToSurface={snapToSurface}
                   runSampleAnalysisRef={runSampleAnalysisRef}
+                  pulseOptimizeRef={pulseOptimizeRef}
                   onMonteCarloSensitivity={setSensitivityBySurface}
                 />
               </div>
