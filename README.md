@@ -1,3 +1,35 @@
+<div align="center">
+  <a href="http://localhost:5173">
+    <img src="assets/banner.png" alt="MacOptics" width="100%" style="max-width: 100%;" />
+  </a>
+  <br /><br />
+  <a href="http://localhost:5173" class="live-demo-btn">Live Demo</a>
+  <br /><br /><br />
+</div>
+
+<br />
+
+<style>
+  .live-demo-btn {
+    display: inline-block;
+    background: linear-gradient(135deg, #22D3EE 0%, #6366F1 100%);
+    color: white;
+    font-weight: bold;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    text-decoration: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    margin-top: 12px;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .live-demo-btn:hover {
+    box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
+    transform: translateY(-2px);
+  }
+</style>
+
+<br /><br />
+
 # MacOptics — Optical Ray Tracing
 
 Open-source, license-free optical design software with a **React + FastAPI** architecture. Design singlet lenses, run ray traces, and visualize performance metrics.
@@ -19,30 +51,60 @@ Open-source, license-free optical design software with a **React + FastAPI** arc
 
 ---
 
-## Features
+## Project Goals
 
-### Core Optical Engine
+- Deliver a modern, free optical design tool for students, researchers, and small teams
+- Bridge laser and ultrafast optics (Gaussian beams, dispersion) with manufacturing-grade reliability analysis
+- Provide a clean workflow from design through trace to ISO 10110 export—without vendor lock-in
+
+---
+
+## Installation
+
+**Backend (FastAPI / Python)**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Frontend (Vite / React)**
+
+```bash
+cd web-app
+npm install
+```
+
+### Quick Start
+
+Run both services in two terminal windows:
+
+```bash
+# Terminal 1 — Backend
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+```bash
+# Terminal 2 — Frontend
+cd web-app && npm run dev
+```
+
+Then open **http://localhost:5173**
+
+---
+
+## Killer Features
+
+Once you're up and running, here's what you get:
 
 - **High-precision ray tracing** — Sequential ray optics via rayoptics; spot diagrams, RMS radius, and focus metrics at the image plane
-- **Real-time SVG rendering** — Interactive cross-section viewport with zoom, pan, and through-focus scan line
-- **Dynamic optical_stack management** — Add, edit, reorder, and remove surfaces; live state sync with backend trace
-
-### Laser & Ultrafast Toolkit (Premium)
-
-- **Gaussian Beam Propagation (ABCD Matrix)** — Beam waist (w₀), Rayleigh range (z_R), and envelope visualization
-- **M² Beam Quality Analysis** — Configurable M² factor in System Properties for real-world laser simulation
-- **Femtosecond Dispersion (GDD/TOD)** — Group Delay Dispersion and pulse metrics in the Ultrafast HUD; thermal lensing heat map for high-power CW
-
-### Engineering & Manufacturing
-
-- **Monte Carlo Reliability Analysis** — Tolerance jitter (R±, T±, Tilt±); point cloud yield map with in-spec vs. outlier color coding; sensitivity heatmap in System Editor
-- **ISO 10110 Technical Blueprint Export** — Cross-section, dimension lines (CT), data table (Surf, S/D, Material), and title block; SVG and PDF export
-
-### Modern UX
-
-- **Magnetic Snapping to Focus/Surface** — Scan line snaps to best focus and surface boundaries for precise inspection
-- **Space + Drag Navigation** — Pan viewport without accidental selections; double-click to reset view
-- **Mac-aware Keybinding System** — ⌥ Option / Alt labels adapt to platform for Override Snap-to-Focus
+- **Real-time SVG viewport** — Interactive cross-section with zoom, pan, and through-focus scan line; dynamic optical_stack management
+- **Gaussian beam propagation** — Beam waist (w₀), Rayleigh range (z_R), M² analysis; ABCD matrix envelope visualization
+- **Femtosecond dispersion** — GDD/TOD in the Ultrafast HUD; thermal lensing heat map for high-power CW
+- **Monte Carlo reliability** — Tolerance jitter (R±, T±, Tilt±); point cloud yield map; sensitivity heatmap in System Editor
+- **ISO 10110 export** — Cross-section, dimension lines (CT), data table (Surf, S/D, Material), title block; SVG and PDF
+- **Magnetic snapping** — Scan line snaps to best focus and surface boundaries; Space+Drag pan; platform-aware Alt/⌥ keybindings
 
 ---
 
@@ -85,41 +147,6 @@ MacOpticsApp/
 2. User clicks **Trace** → frontend sends `optical_stack` to `/api/trace`
 3. Backend builds optical model, traces rays, returns `{ rays, surfaces, focusZ, performance }`
 4. Frontend renders rays and lens profiles in SVG viewport
-
-## Installation
-
-**Backend (FastAPI / Python)**
-
-```bash
-python3 -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-**Frontend (Vite / React)**
-
-```bash
-cd web-app
-npm install
-```
-
----
-
-### Quick Start
-
-Run both services in two terminal windows:
-
-```bash
-# Terminal 1 — Backend
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-```bash
-# Terminal 2 — Frontend
-cd web-app && npm run dev
-```
-
-Then open **http://localhost:5173**
 
 ## Configuration
 
