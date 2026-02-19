@@ -289,7 +289,7 @@ export function SystemProperties({
             </label>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            Snap to Focus: Gold Diamond. Snap to Surface: lens vertices.
+            Snap to Focus: Gold Diamond. Snap to Surface: lens vertices. Hold <kbd className="px-1 py-0.5 rounded bg-white/10 text-slate-400">Alt</kbd> to disable snapping for fine-grained inspection.
           </p>
         </section>
 

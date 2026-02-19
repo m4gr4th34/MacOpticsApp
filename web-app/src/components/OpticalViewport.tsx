@@ -697,6 +697,7 @@ export function OpticalViewport({
     transformState: { scale: number; positionX: number; positionY: number }
     contentComponent: HTMLDivElement | null
   } | null>(null)
+  const [isAltHeld, setIsAltHeld] = useState(false)
   const [scanHud, setScanHud] = useState<{
     isHovering: boolean
     mouseX: number
@@ -708,6 +709,21 @@ export function OpticalViewport({
     /** When snapped to a surface, the 0-based surface index; otherwise null */
     snappedSurfaceIndex: number | null
   }>({ isHovering: false, mouseX: 0, mouseY: 0, cursorSvgX: 0, cursorSvgY: 0, scanSvgX: 0, cursorZ: 0, snappedSurfaceIndex: null })
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey) setIsAltHeld(true)
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.altKey) setIsAltHeld(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [])
 
   const handleSvgMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
@@ -746,6 +762,8 @@ export function OpticalViewport({
       let bestDist = SCAN_SNAP_PX
       let snappedSurfaceIndex: number | null = null
 
+      // Alt key: temporarily disable all snapping for fine-grained manual inspection
+      if (!isAltHeld) {
       // Priority 1: Surface snap (when snapToSurface, magnetically snap within 10px)
       if (snapToSurface) {
         for (let i = 0; i < zPositions.length; i++) {
@@ -780,6 +798,7 @@ export function OpticalViewport({
           }
         }
       }
+      }
       // Optical Z (mm) = (SVG X - xOffset) / scale — NOT screen pixels; SVG X is in viewBox units
       const zCursorPos = (scanSvgX - xOffset) / scale
       if (DEBUG_HUD_COORDS) {
@@ -796,7 +815,7 @@ export function OpticalViewport({
         snappedSurfaceIndex,
       })
     },
-    [scale, xOffset, viewWidth, viewHeight, zPositions, traceResult?.focusZ, traceResult?.bestFocusZ, snapToFocus, snapToSurface]
+    [scale, xOffset, viewWidth, viewHeight, zPositions, traceResult?.focusZ, traceResult?.bestFocusZ, snapToFocus, snapToSurface, isAltHeld]
   )
 
   const handleSvgMouseLeave = useCallback(() => {
@@ -1190,17 +1209,36 @@ export function OpticalViewport({
 
           {scanHud.isHovering && (
             <>
-              <line
-                x1={scanHud.scanSvgX}
-                y1={0}
-                x2={scanHud.scanSvgX}
-                y2={viewHeight}
-                stroke={scanHud.snappedSurfaceIndex != null ? '#ffffff' : '#22D3EE'}
-                strokeWidth="1"
-                strokeDasharray="4 4"
-                strokeOpacity="0.8"
-                pointerEvents="none"
-              />
+              <motion.g
+                key={scanHud.snappedSurfaceIndex != null ? `snapped-${scanHud.snappedSurfaceIndex}` : 'free'}
+                x={scanHud.scanSvgX}
+                initial={false}
+                animate={
+                  scanHud.snappedSurfaceIndex != null
+                    ? {
+                        x: [
+                          scanHud.scanSvgX,
+                          scanHud.scanSvgX + 1,
+                          scanHud.scanSvgX - 1,
+                          scanHud.scanSvgX,
+                        ],
+                        transition: { duration: 0.15 },
+                      }
+                    : { x: scanHud.scanSvgX }
+                }
+              >
+                <line
+                  x1={0}
+                  y1={0}
+                  x2={0}
+                  y2={viewHeight}
+                  stroke={scanHud.snappedSurfaceIndex != null ? '#ffffff' : '#22D3EE'}
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                  strokeOpacity="0.8"
+                  pointerEvents="none"
+                />
+              </motion.g>
               {/* Debug circle: verifies mouse→SVG coordinate transform (remove when verified) */}
               <circle
                 cx={scanHud.cursorSvgX}
@@ -1267,11 +1305,17 @@ export function OpticalViewport({
               transition={{ type: 'spring', stiffness: 200, damping: 20 }}
               exit={{ opacity: 0, scale: 0.95 }}
             >
-              {scanHud.snappedSurfaceIndex != null && !isPersistentHud && (
-                <div className="text-[10px] font-medium text-white/90 mb-1.5 -mt-0.5">
-                  Surface #{scanHud.snappedSurfaceIndex + 1}
-                </div>
-              )}
+              {scanHud.snappedSurfaceIndex != null && !isPersistentHud && (() => {
+                const s = surfaces[scanHud.snappedSurfaceIndex!]
+                const label = s
+                  ? s.description || s.material || (s.type === 'Glass' ? 'Lens' : 'Air')
+                  : `Surface ${scanHud.snappedSurfaceIndex! + 1}`
+                return (
+                  <div className="text-[10px] font-medium text-white/90 mb-1.5 -mt-0.5">
+                    Surface {scanHud.snappedSurfaceIndex! + 1}: {label}
+                  </div>
+                )
+              })()}
               <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs">
                 <HudRow label="Z:" value={`${hudMetrics ? hudMetrics.z.toFixed(2) : hudZ.toFixed(2)} mm`} metricId="z" highlightedMetric={highlightedMetric} />
                 {hudMetrics?.rmsPerField && hudMetrics.rmsPerField.length > 0 ? (
