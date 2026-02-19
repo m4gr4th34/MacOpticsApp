@@ -28,6 +28,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Local DB (user coatings)
+data/
+
 # Logs
 *.log
 npm-debug.log*

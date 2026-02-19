@@ -59,6 +59,26 @@ class CoatingItem(BaseModel):
     is_hr: bool
 
 
+class CoatingLibraryItem(BaseModel):
+    """Coating with category and source for library view."""
+    name: str
+    category: str
+    description: str
+    is_hr: bool
+    source: str  # "builtin" | "custom"
+
+
+class UserCoatingCreate(BaseModel):
+    """Request body for creating a user-defined coating."""
+    name: str
+    category: str = "Custom"
+    data_type: str  # "constant" | "table"
+    constant_value: Optional[float] = None  # for data_type=constant
+    data_points: Optional[List[Dict[str, float]]] = None  # [{wavelength, reflectivity}, ...] for data_type=table
+    description: str = ""
+    is_hr: bool = False
+
+
 @app.get("/api/coatings", response_model=List[CoatingItem])
 def get_coatings():
     """
@@ -75,6 +95,71 @@ def get_coatings():
         )
         for c in coatings
     ]
+
+
+@app.get("/api/coatings/library", response_model=List[CoatingLibraryItem])
+def get_coatings_library():
+    """
+    Return full coating library (50+ built-in + user-defined) with category and source.
+    """
+    from coating_service import get_coating_service
+    from coating_db import get_all_user_coatings
+    user = get_all_user_coatings()
+    svc = get_coating_service(user)
+    lib = svc.get_library()
+    return [
+        CoatingLibraryItem(
+            name=c.get("name", ""),
+            category=c.get("category", "Custom"),
+            description=c.get("description", ""),
+            is_hr=c.get("is_hr", False),
+            source=c.get("source", "builtin"),
+        )
+        for c in lib
+    ]
+
+
+@app.post("/api/coatings/custom")
+def create_custom_coating(req: UserCoatingCreate):
+    """
+    Save a new user-defined coating. data_type: 'constant' (single R value) or 'table' (wavelength/reflectivity pairs).
+    """
+    from coating_db import insert_user_coating
+    if req.data_type not in ("constant", "table"):
+        raise HTTPException(status_code=400, detail="data_type must be 'constant' or 'table'")
+    if req.data_type == "constant":
+        if req.constant_value is None:
+            raise HTTPException(status_code=400, detail="constant_value required for data_type=constant")
+        val = max(0.0, min(1.0, float(req.constant_value)))
+        created = insert_user_coating(
+            name=req.name,
+            category=req.category,
+            data_type="constant",
+            constant_value=val,
+            description=req.description,
+            is_hr=req.is_hr,
+        )
+    else:
+        if not req.data_points or not isinstance(req.data_points, list):
+            raise HTTPException(status_code=400, detail="data_points required for data_type=table (list of {wavelength, reflectivity})")
+        pts = []
+        for p in req.data_points:
+            if isinstance(p, dict) and "wavelength" in p and "reflectivity" in p:
+                pts.append({
+                    "wavelength": float(p["wavelength"]),
+                    "reflectivity": max(0.0, min(1.0, float(p["reflectivity"]))),
+                })
+        if not pts:
+            raise HTTPException(status_code=400, detail="At least one valid data point required")
+        created = insert_user_coating(
+            name=req.name,
+            category=req.category,
+            data_type="table",
+            data_points=pts,
+            description=req.description,
+            is_hr=req.is_hr,
+        )
+    return created
 
 
 @app.get("/api/coatings/{coating_name}/reflectivity")

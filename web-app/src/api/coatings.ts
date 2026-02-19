@@ -43,6 +43,21 @@ export const COATINGS_FALLBACK: CoatingOption[] = [
   { name: 'HR', description: 'High reflectivity mirror (>99.5%) — reflects instead of refracts', is_hr: true },
 ]
 
+export type CoatingLibraryItem = CoatingOption & {
+  category: string
+  source: 'builtin' | 'custom'
+}
+
+export type CustomCoatingCreate = {
+  name: string
+  category?: string
+  data_type: 'constant' | 'table'
+  constant_value?: number
+  data_points?: { wavelength: number; reflectivity: number }[]
+  description?: string
+  is_hr?: boolean
+}
+
 export async function fetchCoatings(): Promise<CoatingOption[]> {
   try {
     const res = await fetch(`${API_BASE}/api/coatings`)
@@ -56,6 +71,44 @@ export async function fetchCoatings(): Promise<CoatingOption[]> {
     }))
   } catch {
     return COATINGS_FALLBACK
+  }
+}
+
+/** Fetch full library with category and source (built-in vs custom) */
+export async function fetchCoatingsLibrary(): Promise<CoatingLibraryItem[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/coatings/library`)
+    if (!res.ok) return []
+    const data = await res.json()
+    if (!Array.isArray(data)) return []
+    return data.map((c: { name?: string; description?: string; is_hr?: boolean; category?: string; source?: string }) => ({
+      name: c.name ?? '',
+      description: c.description ?? '',
+      is_hr: c.is_hr ?? false,
+      category: c.category ?? 'Custom',
+      source: (c.source === 'custom' ? 'custom' : 'builtin') as 'builtin' | 'custom',
+    }))
+  } catch {
+    return []
+  }
+}
+
+/** Save a new user-defined coating */
+export async function createCustomCoating(coating: CustomCoatingCreate): Promise<CoatingOption> {
+  const res = await fetch(`${API_BASE}/api/coatings/custom`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(coating),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || 'Failed to create coating')
+  }
+  const data = await res.json()
+  return {
+    name: data.name ?? '',
+    description: data.description ?? '',
+    is_hr: data.type === 'HR',
   }
 }
 
