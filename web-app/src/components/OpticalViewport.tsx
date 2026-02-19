@@ -473,6 +473,8 @@ type OpticalViewportProps = {
   showBestFocus?: boolean
   snapToFocus?: boolean
   snapToSurface?: boolean
+  /** Ref to trigger 10-iteration sample analysis from InfoPanel */
+  runSampleAnalysisRef?: React.MutableRefObject<(() => void) | null>
 }
 
 export function OpticalViewport({
@@ -486,6 +488,7 @@ export function OpticalViewport({
   showBestFocus = true,
   snapToFocus = true,
   snapToSurface = true,
+  runSampleAnalysisRef,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
   const [isMonteCarloRunning, setIsMonteCarloRunning] = useState(false)
@@ -621,7 +624,7 @@ export function OpticalViewport({
     }
   }, [systemState, onSystemStateChange])
 
-  const handleMonteCarlo = useCallback(async () => {
+  const handleMonteCarlo = useCallback(async (iterations = 100) => {
     const hasTolerances = systemState.surfaces.some(
       (s) => (s.radiusTolerance ?? 0) > 0 || (s.thicknessTolerance ?? 0) > 0 || (s.tiltTolerance ?? 0) > 0
     )
@@ -640,6 +643,7 @@ export function OpticalViewport({
         fieldAngles: systemState.fieldAngles,
         numRays: systemState.numRays,
         focusMode: systemState.focusMode ?? 'On-Axis',
+        iterations,
       })
       if (res.error) {
         onSystemStateChange((prev) => ({ ...prev, traceError: res.error ?? null }))
@@ -653,6 +657,15 @@ export function OpticalViewport({
       setIsMonteCarloRunning(false)
     }
   }, [systemState, onSystemStateChange])
+
+  useEffect(() => {
+    if (runSampleAnalysisRef) {
+      runSampleAnalysisRef.current = () => handleMonteCarlo(10)
+      return () => {
+        runSampleAnalysisRef.current = null
+      }
+    }
+  }, [runSampleAnalysisRef, handleMonteCarlo])
 
   // Clear Monte Carlo result when system changes
   useEffect(() => {

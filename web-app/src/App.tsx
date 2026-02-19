@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { NavBar, type NavTab } from './components/NavBar'
 import { Canvas } from './components/Canvas'
 import { SystemEditor } from './components/SystemEditor'
@@ -77,6 +77,7 @@ function App() {
   const [showBestFocus, setShowBestFocus] = useState(true)
   const [snapToFocus, setSnapToFocus] = useState(true)
   const [snapToSurface, setSnapToSurface] = useState(true)
+  const runSampleAnalysisRef = useRef<(() => void) | null>(null)
   const [systemState, setSystemState] = useState<SystemState>(() => {
     const loaded = loadLastDesign()
     return loaded ?? { ...DEFAULT_SYSTEM_STATE, ...computePerformance(DEFAULT_SYSTEM_STATE) }
@@ -146,6 +147,7 @@ function App() {
                   highlightedMetric={highlightedMetric}
                   onHighlightMetric={setHighlightedMetric}
                   onSystemStateChange={onSystemStateChange}
+                  onRunSampleAnalysis={() => runSampleAnalysisRef.current?.()}
                 />
               </div>
               <div className="flex-1 min-w-0 min-h-[400px]">
@@ -159,6 +161,7 @@ function App() {
                   showBestFocus={showBestFocus}
                   snapToFocus={snapToFocus}
                   snapToSurface={snapToSurface}
+                  runSampleAnalysisRef={runSampleAnalysisRef}
                 />
               </div>
             </div>

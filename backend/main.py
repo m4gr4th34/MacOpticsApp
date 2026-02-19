@@ -58,6 +58,7 @@ class OpticalStackRequest(BaseModel):
     numRays: int = 9
     focusMode: str = "On-Axis"  # 'On-Axis' | 'Balanced'
     m2Factor: float = 1.0  # Laser M² factor for Gaussian beam
+    iterations: Optional[int] = None  # Monte Carlo iterations (default 100)
 
 
 @app.post("/api/trace")
@@ -73,13 +74,14 @@ def trace_rays(req: OpticalStackRequest):
 @app.post("/api/monte-carlo")
 def monte_carlo(req: OpticalStackRequest):
     """
-    Run Monte Carlo sensitivity analysis: 100 iterations with jittered surface
+    Run Monte Carlo sensitivity analysis: N iterations with jittered surface
     parameters within tolerances. Returns spot positions at image plane for
     point cloud (spot diagram) visualization.
     """
     from monte_carlo_service import run_monte_carlo
     optical_stack = req.model_dump()
-    return run_monte_carlo(optical_stack, iterations=100)
+    iterations = optical_stack.pop("iterations", None) or 100
+    return run_monte_carlo(optical_stack, iterations=iterations)
 
 
 @app.get("/api/health")

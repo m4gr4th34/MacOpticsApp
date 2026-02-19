@@ -6,6 +6,7 @@ import {
   FileText,
   ScanLine,
   ChevronDown,
+  Dices,
 } from 'lucide-react'
 import { isMac } from '../config'
 import type { HighlightedMetric } from '../types/ui'
@@ -30,6 +31,11 @@ const SECTIONS = [
     id: 'ultrafast',
     title: 'Ultrafast / Femtosecond Design',
     icon: Zap,
+  },
+  {
+    id: 'montecarlo',
+    title: 'Manufacturing Reliability (Monte Carlo)',
+    icon: Dices,
   },
   {
     id: 'export',
@@ -212,9 +218,10 @@ type InfoPanelProps = {
   highlightedMetric: HighlightedMetric
   onHighlightMetric: (m: HighlightedMetric) => void
   onSystemStateChange?: (state: SystemState | ((prev: SystemState) => SystemState)) => void
+  onRunSampleAnalysis?: () => void
 }
 
-export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateChange }: InfoPanelProps) {
+export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateChange, onRunSampleAnalysis }: InfoPanelProps) {
   const [openSection, setOpenSection] = useState<SectionId | null>('nav')
 
   return (
@@ -353,6 +360,38 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateC
                         className="mt-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors"
                       >
                         Load Low-Dispersion Presets
+                      </button>
+                    )}
+                  </div>
+                )}
+                {id === 'montecarlo' && (
+                  <div className="space-y-4">
+                    <p>
+                      Monte Carlo sensitivity analysis simulates manufacturing variability by
+                      jittering surface parameters (radius, thickness) within their tolerances over
+                      many iterations. Each iteration produces a slightly different optical system;
+                      the combined spot positions at the image plane form a point cloud that shows
+                      how robust your design is to fabrication errors.
+                    </p>
+                    <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
+                      <p className="text-xs font-medium text-cyan-electric/90 mb-1">RMS Spot Radius</p>
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                        The root-mean-square distance of all rays from the centroid at the image
+                        plane. Lower values indicate tighter manufacturing tolerance and a more
+                        robust design.
+                      </p>
+                    </div>
+                    <p>
+                      Set R±, T±, and Tilt± tolerances in the System Editor, then run the analysis
+                      to see the point cloud and RMS spread at focus.
+                    </p>
+                    {onRunSampleAnalysis && (
+                      <button
+                        type="button"
+                        onClick={onRunSampleAnalysis}
+                        className="mt-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors"
+                      >
+                        Run Sample Analysis
                       </button>
                     )}
                   </div>

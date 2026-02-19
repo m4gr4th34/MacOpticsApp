@@ -92,10 +92,12 @@ export async function runMonteCarlo(optical_stack: {
   fieldAngles: number[]
   numRays: number
   focusMode?: FocusMode
+  iterations?: number
 }): Promise<MonteCarloResponse> {
   const payload = {
     ...optical_stack,
     focusMode: optical_stack.focusMode ?? 'On-Axis',
+    iterations: optical_stack.iterations,
     surfaces: optical_stack.surfaces.map((s) => ({
       id: s.id,
       type: s.type,

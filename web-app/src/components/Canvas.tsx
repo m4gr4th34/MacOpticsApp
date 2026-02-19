@@ -12,6 +12,7 @@ type CanvasProps = {
   showBestFocus?: boolean
   snapToFocus?: boolean
   snapToSurface?: boolean
+  runSampleAnalysisRef?: React.MutableRefObject<(() => void) | null>
 }
 
 export function Canvas({
@@ -24,6 +25,7 @@ export function Canvas({
   showBestFocus = true,
   snapToFocus = true,
   snapToSurface = true,
+  runSampleAnalysisRef,
 }: CanvasProps) {
   return (
     <div className="h-full min-h-[500px] w-full">
@@ -38,6 +40,7 @@ export function Canvas({
         showBestFocus={showBestFocus}
         snapToFocus={snapToFocus}
         snapToSurface={snapToSurface}
+        runSampleAnalysisRef={runSampleAnalysisRef}
       />
     </div>
   )
