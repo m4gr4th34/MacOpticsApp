@@ -1,7 +1,9 @@
 """
 LENS-X export: Generate valid LENS-X JSON from optical stack.
 Ensures every surface exports radius, thickness, material, and coating.
-See LENS_X_SPEC.md for schema.
+
+DEVELOPER NOTE: Before making changes to export logic, read LENS_X_SPEC.md
+in the project root. It is the ground truth for the Lens-X schema.
 """
 
 from typing import Any, Dict, List, Optional

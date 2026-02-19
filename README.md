@@ -40,6 +40,24 @@ Open-source, license-free optical design software with a **React + FastAPI** arc
 
 ---
 
+## 🚀 Powered by Lens-X
+
+MacOptics uses **Lens-X**, a physics-aware optical interchange format that goes beyond legacy ISO 10110 flat drawings. Instead of a static blueprint, Lens-X embeds geometry, glass chemistry (Sellmeier), coating data, and manufacturing tolerances in a single JSON file—enabling a true **Digital Twin** of your optical system.
+
+| Aspect | Legacy ISO 10110 | Lens-X (Digital Twin) |
+|--------|------------------|------------------------|
+| **Output** | Flat 2D drawing (SVG/PDF) | JSON + optional drawing |
+| **Geometry** | Cross-section only | Radius, thickness, aperture (mm) |
+| **Glass** | Material name only | Sellmeier coefficients for n(λ) |
+| **Coatings** | Not specified | MgF₂, BBAR, V-Coat, mirrors, HR |
+| **Tolerances** | S/D, R±, T± in drawing | Structured in `manufacturing` |
+| **Reusability** | Manual re-entry | Import → trace → export round-trip |
+| **Simulation** | Requires separate tools | Same file drives ray trace |
+
+Export your design as Lens-X JSON to share a complete, executable specification. Import Lens-X files to restore geometry, materials, and coatings without re-typing. See `LENS_X_SPEC.md` for the schema.
+
+---
+
 ## Installation
 
 **Backend (FastAPI / Python)**

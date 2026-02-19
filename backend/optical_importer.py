@@ -1,6 +1,9 @@
 """
 OpticalImporter: Import lens systems from JSON (Zemax-style) and SVG files.
 Maps imported data to the Surface model (Radius, Thickness, Material, Aperture).
+
+DEVELOPER NOTE: Before making changes to import logic, read LENS_X_SPEC.md
+in the project root. It is the ground truth for the Lens-X schema.
 """
 
 import json

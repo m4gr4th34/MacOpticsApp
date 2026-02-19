@@ -1,5 +1,8 @@
 /**
  * Import lens system from .json or .svg via /api/import/lens-system.
+ *
+ * DEVELOPER NOTE: Before making changes to import logic, read LENS_X_SPEC.md
+ * in the project root. It is the ground truth for the Lens-X schema.
  */
 
 import { config } from '../config'

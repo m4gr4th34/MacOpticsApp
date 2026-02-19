@@ -9,6 +9,7 @@ import {
   Dices,
   Palette,
   Layers,
+  BookOpen,
 } from 'lucide-react'
 import { isMac } from '../config'
 import type { HighlightedMetric } from '../types/ui'
@@ -20,6 +21,7 @@ const kbdClass =
 
 const SECTIONS = [
   { id: 'nav', title: 'Navigation Shortcuts', icon: MousePointer2 },
+  { id: 'lensx', title: 'Understanding Lens-X', icon: BookOpen },
   { id: 'laser', title: 'Laser & Gaussian Optics', icon: ScanLine },
   { id: 'coatings', title: 'Coatings & Reflectivity', icon: Layers },
   { id: 'ultrafast', title: 'Ultrafast / Femtosecond Design', icon: Zap },
@@ -222,6 +224,25 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateC
                     <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
                       <p className="text-xs font-medium text-cyan-electric/90 mb-0.5">Pro-Tip</p>
                       <p className="text-slate-400 text-sm leading-relaxed">Note: The Gold Diamond indicates the point of minimum beam waist, which may shift based on lens dispersion.</p>
+                    </div>
+                  </div>
+                )}
+                {id === 'lensx' && (
+                  <div className="space-y-4">
+                    <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider">
+                      Physics-Aware Interchange Format
+                    </h4>
+                    <p>
+                      MacOptics uses a <strong className="text-cyan-electric">Physics-Aware</strong> format called <strong className="text-slate-300">Lens-X</strong>. Unlike a simple drawing file, Lens-X carries <strong className="text-slate-300">glass chemistry</strong> (Sellmeier coefficients for n(λ)) and <strong className="text-slate-300">coating data</strong> within the file itself.
+                    </p>
+                    <p>
+                      When you export a design, the JSON includes radius, thickness, material, coating, and manufacturing tolerances for every surface. When you import, the software restores the full optical model—no manual re-entry of refractive indices or coating choices.
+                    </p>
+                    <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
+                      <p className="text-xs font-medium text-cyan-electric/90 mb-0.5">Why it matters</p>
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                        A Lens-X file is a Digital Twin: the same data drives ray tracing, chromatic analysis, and manufacturing export. Share a single JSON to hand off a complete, executable specification.
+                      </p>
                     </div>
                   </div>
                 )}
