@@ -328,6 +328,57 @@ export function SystemProperties({
           </label>
         </section>
 
+        {/* Physical Optics / Gaussian Beam */}
+        <section className="glass-card p-4">
+          <h3 className="text-sm font-medium text-slate-300 mb-3">Physical Optics</h3>
+          <div className="space-y-2">
+            <label className="block text-sm text-slate-400">Laser M² Factor</label>
+            <input
+              type="number"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={systemState.m2Factor ?? 1.0}
+              onChange={(e) =>
+                onSystemStateChange((prev) => ({
+                  ...prev,
+                  m2Factor: Math.max(0.1, Math.min(10, Number(e.target.value) || 1)),
+                }))
+              }
+              className={inputClass}
+            />
+            <p className="text-xs text-slate-500">
+              M² = 1.0 for perfect Gaussian. Higher values show how beam quality affects focus.
+            </p>
+          </div>
+        </section>
+
+        {/* Ultrafast / Dispersion */}
+        <section className="glass-card p-4">
+          <h3 className="text-sm font-medium text-slate-300 mb-3">Ultrafast Pulse</h3>
+          <div className="space-y-2">
+            <label className="block text-sm text-slate-400">Pulse Width (fs)</label>
+            <input
+              type="number"
+              min={5}
+              max={10000}
+              step={10}
+              value={systemState.pulseWidthFs ?? 100}
+              onChange={(e) =>
+                onSystemStateChange((prev) => ({
+                  ...prev,
+                  pulseWidthFs: Math.max(5, Math.min(10000, Number(e.target.value) || 100)),
+                }))
+              }
+              className={inputClass}
+              placeholder="100"
+            />
+            <p className="text-xs text-slate-500">
+              Input pulse width for dispersion analysis. Sellmeier equation used for glass.
+            </p>
+          </div>
+        </section>
+
         {/* Performance Card */}
         <section className="glass-card p-4 border-cyan-electric/20">
           <h3 className="text-sm font-medium text-cyan-electric mb-3">Performance</h3>

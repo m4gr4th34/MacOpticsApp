@@ -231,6 +231,9 @@ export function SystemEditor({
               <th className="py-2 pr-4">n</th>
               <th className="py-2 pr-4">Diameter (mm)</th>
               <th className="py-2 pr-4">Material</th>
+              <th className="py-2 pr-3" title="Radius ± (mm)">R ±</th>
+              <th className="py-2 pr-3" title="Thickness ± (mm)">T ±</th>
+              <th className="py-2 pr-3" title="Tilt ± (deg)">Tilt ±</th>
               <th className="py-2 w-10" />
             </tr>
           </thead>
@@ -245,7 +248,7 @@ export function SystemEditor({
               onClick={addSurfaceAtStart}
               className="border-b border-dashed border-white/20 cursor-pointer bg-slate-900/30 backdrop-blur-[4px] hover:bg-slate-900/50 text-slate-500 hover:text-cyan-electric transition-colors"
             >
-              <td colSpan={9} className="py-2">
+              <td colSpan={12} className="py-2">
                 <span className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   Insert surface at start
@@ -364,6 +367,57 @@ export function SystemEditor({
                     onClick={(e) => e.stopPropagation()}
                   />
                 </td>
+                <td className="py-2 pr-3">
+                  <input
+                    type="number"
+                    value={s.radiusTolerance ?? ''}
+                    placeholder="0"
+                    min={0}
+                    step={0.01}
+                    onChange={(e) =>
+                      updateSurface(s.id, {
+                        radiusTolerance: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className={`${numericInputClass} min-w-[3.5rem]`}
+                    title="Radius tolerance ± (mm)"
+                  />
+                </td>
+                <td className="py-2 pr-3">
+                  <input
+                    type="number"
+                    value={s.thicknessTolerance ?? ''}
+                    placeholder="0"
+                    min={0}
+                    step={0.01}
+                    onChange={(e) =>
+                      updateSurface(s.id, {
+                        thicknessTolerance: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className={`${numericInputClass} min-w-[3.5rem]`}
+                    title="Thickness tolerance ± (mm)"
+                  />
+                </td>
+                <td className="py-2 pr-3">
+                  <input
+                    type="number"
+                    value={s.tiltTolerance ?? ''}
+                    placeholder="0"
+                    min={0}
+                    step={0.01}
+                    onChange={(e) =>
+                      updateSurface(s.id, {
+                        tiltTolerance: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className={`${numericInputClass} min-w-[3.5rem]`}
+                    title="Tilt tolerance ± (deg)"
+                  />
+                </td>
                 <td className="py-2">
                   <button
                     type="button"
@@ -387,7 +441,7 @@ export function SystemEditor({
               onClick={() => addSurfaceAtIndex(surfaces.length)}
               className="border-b border-dashed border-white/20 cursor-pointer bg-slate-900/30 backdrop-blur-[4px] hover:bg-slate-900/50 text-slate-500 hover:text-cyan-electric transition-colors"
             >
-              <td colSpan={9} className="py-2">
+              <td colSpan={12} className="py-2">
                 <span className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   Insert surface at end

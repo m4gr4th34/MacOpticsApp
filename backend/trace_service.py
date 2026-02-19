@@ -334,9 +334,10 @@ def optical_stack_to_surf_data(surfaces):
 def run_trace(optical_stack: dict) -> dict:
     """
     Run ray trace on optical_stack from frontend.
-    Returns: { rays: [[[z,y], ...], ...], surfaces: [[[z,y], ...], ...], focusZ, performance }
+    Returns: { rays, surfaces, focusZ, performance, gaussianBeam? }
     """
     from singlet_rayoptics import build_singlet_from_surface_data, get_focal_length, run_spot_diagram
+    from gaussian_beam import compute_gaussian_beam
 
     surfaces = optical_stack.get("surfaces", [])
     if not surfaces:
@@ -346,6 +347,8 @@ def run_trace(optical_stack: dict) -> dict:
     wvl_nm = float(optical_stack.get("wavelengths", [587.6])[0] or 587.6)
     num_rays = int(optical_stack.get("numRays", 9) or 9)
     field_angles = optical_stack.get("fieldAngles", [0])
+    m2 = float(optical_stack.get("m2Factor", 1.0) or 1.0)
+    m2 = max(0.1, min(10.0, m2))
     focus_mode = str(optical_stack.get("focusMode", "On-Axis") or "On-Axis")
     if focus_mode not in ("On-Axis", "Balanced"):
         focus_mode = "On-Axis"
@@ -467,7 +470,22 @@ def run_trace(optical_stack: dict) -> dict:
     else:
         best_focus_z = float(focus_z)
 
-    return {
+    # Gaussian beam (ABCD) propagation for Physical Optics view
+    gaussian_beams = []
+    try:
+        gb = compute_gaussian_beam(
+            surf_data_list,
+            epd_mm=epd,
+            wvl_nm=wvl_nm,
+            m2=m2,
+            n_samples=80,
+            focus_z_override=best_focus_z,
+        )
+        gaussian_beams.append(gb)
+    except Exception:
+        pass
+
+    result = {
         "rays": rays,
         "rayFieldIndices": ray_field_indices,
         "surfaces": surface_curves,
@@ -481,3 +499,13 @@ def run_trace(optical_stack: dict) -> dict:
         },
         "metricsSweep": metrics_sweep,
     }
+    if gaussian_beams:
+        gb = gaussian_beams[0]
+        result["gaussianBeam"] = {
+            "beamEnvelope": gb["beamEnvelope"],
+            "spotSizeAtFocus": gb["spotSizeAtFocus"],
+            "rayleighRange": gb["rayleighRange"],
+            "waistZ": gb["waistZ"],
+            "focusZ": gb["focusZ"],
+        }
+    return result

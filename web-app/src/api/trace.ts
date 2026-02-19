@@ -28,6 +28,13 @@ export type TraceResponse = {
     numRays: number
     rmsPerField?: (number | null)[]
   }>
+  gaussianBeam?: {
+    beamEnvelope: [number, number][]
+    spotSizeAtFocus: number
+    rayleighRange: number
+    waistZ: number
+    focusZ: number
+  }
   error?: string
 }
 
@@ -40,10 +47,12 @@ export async function traceOpticalStack(optical_stack: {
   fieldAngles: number[]
   numRays: number
   focusMode?: FocusMode
+  m2Factor?: number
 }): Promise<TraceResponse> {
   const payload = {
     ...optical_stack,
     focusMode: optical_stack.focusMode ?? 'On-Axis',
+    m2Factor: optical_stack.m2Factor ?? 1.0,
     surfaces: optical_stack.surfaces.map((s) => ({
       id: s.id,
       type: s.type,
@@ -63,6 +72,52 @@ export async function traceOpticalStack(optical_stack: {
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || `Trace failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export type MonteCarloResponse = {
+  spots?: [number, number][]  // [x, y] in mm at image plane
+  focusZ?: number
+  imagePlaneZ?: number
+  rmsSpread?: number
+  numValid?: number
+  error?: string
+}
+
+export async function runMonteCarlo(optical_stack: {
+  surfaces: Surface[]
+  entrancePupilDiameter: number
+  wavelengths: number[]
+  fieldAngles: number[]
+  numRays: number
+  focusMode?: FocusMode
+}): Promise<MonteCarloResponse> {
+  const payload = {
+    ...optical_stack,
+    focusMode: optical_stack.focusMode ?? 'On-Axis',
+    surfaces: optical_stack.surfaces.map((s) => ({
+      id: s.id,
+      type: s.type,
+      radius: s.radius,
+      thickness: s.thickness,
+      refractiveIndex: s.refractiveIndex,
+      diameter: s.diameter,
+      material: s.material,
+      description: s.description,
+      radiusTolerance: s.radiusTolerance,
+      thicknessTolerance: s.thicknessTolerance,
+      tiltTolerance: s.tiltTolerance,
+    })),
+  }
+  const res = await fetch(`${API_BASE}/api/monte-carlo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `Monte Carlo failed: ${res.status}`)
   }
   return res.json()
 }

@@ -7,6 +7,12 @@ export type Surface = {
   diameter: number
   material: string
   description: string
+  /** Tolerance ± (mm) for Radius — Monte Carlo jitter */
+  radiusTolerance?: number
+  /** Tolerance ± (mm) for Thickness — Monte Carlo jitter */
+  thicknessTolerance?: number
+  /** Tolerance ± (degrees) for Tilt — Monte Carlo jitter */
+  tiltTolerance?: number
 }
 
 export type MetricsAtZ = {
@@ -20,6 +26,14 @@ export type MetricsAtZ = {
   rmsPerField?: (number | null)[]
 }
 
+export type GaussianBeam = {
+  beamEnvelope: [number, number][]  // [[z, w], ...] — 1/e² radius (mm)
+  spotSizeAtFocus: number  // w₀ (mm)
+  rayleighRange: number    // z_R (mm)
+  waistZ: number
+  focusZ: number
+}
+
 export type TraceResult = {
   rays: number[][][]
   /** Per-ray field index for correct color mapping (backend provides this) */
@@ -30,6 +44,8 @@ export type TraceResult = {
   zOrigin?: number
   performance?: { rmsSpotRadius: number; totalLength: number; fNumber: number }
   metricsSweep?: MetricsAtZ[]
+  /** Physical optics (ABCD Gaussian) beam data */
+  gaussianBeam?: GaussianBeam
 }
 
 import { config } from '../config'
@@ -42,6 +58,8 @@ export type SystemState = {
   fieldAngles: number[]
   numRays: number
   focusMode: FocusMode
+  m2Factor: number  // Laser M² factor (1.0 = perfect Gaussian)
+  pulseWidthFs: number  // Input pulse width (fs) for ultrafast dispersion
   hasTraced: boolean
   surfaces: Surface[]
   // Performance (computed or from trace)
@@ -85,6 +103,8 @@ export const DEFAULT_SYSTEM_STATE: SystemState = {
   fieldAngles: [...config.defaults.fieldAngles],
   numRays: config.defaults.numRays,
   focusMode: 'On-Axis',
+  m2Factor: 1.0,
+  pulseWidthFs: 100,
   hasTraced: false,
   surfaces: [
     {

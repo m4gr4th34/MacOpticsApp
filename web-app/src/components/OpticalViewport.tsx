@@ -6,11 +6,12 @@ const DEBUG_HUD_COORDS = import.meta.env.DEV
 const DEBUG_FOCUS_ALIGNMENT = import.meta.env.DEV
 import { motion, AnimatePresence } from 'framer-motion'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
-import { Play, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { Play, Loader2, ZoomIn, ZoomOut, Maximize2, Dices } from 'lucide-react'
 import type { SystemState, TraceResult, MetricsAtZ } from '../types/system'
 import type { HighlightedMetric } from '../types/ui'
-import { traceOpticalStack } from '../api/trace'
+import { traceOpticalStack, runMonteCarlo, type MonteCarloResponse } from '../api/trace'
 import { config } from '../config'
+import { computeDispersion } from '../lib/dispersion'
 
 /** Through-Focus diagnostic: 10mm sparkline around cursor with Gold Diamond minimum line.
  * If the dip doesn't align with the dotted line → search algorithm failure. */
@@ -487,10 +488,13 @@ export function OpticalViewport({
   snapToSurface = true,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
+  const [isMonteCarloRunning, setIsMonteCarloRunning] = useState(false)
+  const [monteCarloResult, setMonteCarloResult] = useState<MonteCarloResponse | null>(null)
   const [isPanning, setIsPanning] = useState(false)
   const [isSpaceHeld, setIsSpaceHeld] = useState(false)
   const [showCausticEnvelope, setShowCausticEnvelope] = useState(false)
   const [fieldFilter, setFieldFilter] = useState<number | null>(null)
+  const [hudTab, setHudTab] = useState<'geometry' | 'ultrafast'>('geometry')
   const [hintVisible, setHintVisible] = useState(false)
   const hintLeaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -571,6 +575,7 @@ export function OpticalViewport({
         fieldAngles: systemState.fieldAngles,
         numRays: systemState.numRays,
         focusMode: systemState.focusMode ?? 'On-Axis',
+        m2Factor: systemState.m2Factor ?? 1.0,
       })
       if (res.error) {
         onSystemStateChange((prev) => ({
@@ -592,6 +597,7 @@ export function OpticalViewport({
             zOrigin: res.zOrigin,
             performance: res.performance,
             metricsSweep: res.metricsSweep ?? [],
+            gaussianBeam: res.gaussianBeam,
           },
           traceError: null,
         }))
@@ -608,6 +614,44 @@ export function OpticalViewport({
       setIsTracing(false)
     }
   }, [systemState, onSystemStateChange])
+
+  const handleMonteCarlo = useCallback(async () => {
+    const hasTolerances = systemState.surfaces.some(
+      (s) => (s.radiusTolerance ?? 0) > 0 || (s.thicknessTolerance ?? 0) > 0 || (s.tiltTolerance ?? 0) > 0
+    )
+    if (!hasTolerances) {
+      onSystemStateChange((prev) => ({ ...prev, traceError: 'Set tolerances (R±, T±, Tilt±) in System Editor first' }))
+      return
+    }
+    setIsMonteCarloRunning(true)
+    setMonteCarloResult(null)
+    onSystemStateChange((prev) => ({ ...prev, traceError: null }))
+    try {
+      const res = await runMonteCarlo({
+        surfaces: systemState.surfaces,
+        entrancePupilDiameter: systemState.entrancePupilDiameter,
+        wavelengths: systemState.wavelengths,
+        fieldAngles: systemState.fieldAngles,
+        numRays: systemState.numRays,
+        focusMode: systemState.focusMode ?? 'On-Axis',
+      })
+      if (res.error) {
+        onSystemStateChange((prev) => ({ ...prev, traceError: res.error ?? null }))
+      } else {
+        setMonteCarloResult(res)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Monte Carlo failed'
+      onSystemStateChange((prev) => ({ ...prev, traceError: msg }))
+    } finally {
+      setIsMonteCarloRunning(false)
+    }
+  }, [systemState, onSystemStateChange])
+
+  // Clear Monte Carlo result when system changes
+  useEffect(() => {
+    setMonteCarloResult(null)
+  }, [systemState.surfaces, systemState.entrancePupilDiameter, systemState.numRays])
 
   // Run trace when surfaces were reordered (pendingTrace set on drop)
   useEffect(() => {
@@ -647,6 +691,15 @@ export function OpticalViewport({
     if (!showCausticEnvelope || !traceResult?.rays?.length) return null
     return computeCausticEnvelope(traceResult.rays, toSvg, 80)
   }, [showCausticEnvelope, traceResult?.rays, scale, xOffset, cy])
+
+  const beamEnvelopePath = useMemo(() => {
+    const gb = traceResult?.gaussianBeam
+    if (!gb?.beamEnvelope?.length) return null
+    const pts = gb.beamEnvelope
+    const lower = pts.map(([z, w]) => toSvg(z, -w)).join(' L ')
+    const upper = [...pts].reverse().map(([z, w]) => toSvg(z, w)).join(' L ')
+    return `M ${lower} L ${upper} Z`
+  }, [traceResult?.gaussianBeam, scale, xOffset, cy])
 
   /** Generate SVG path for a single surface profile at z with given radius and diameter */
   function surfaceProfilePath(
@@ -924,6 +977,21 @@ export function OpticalViewport({
   const hudZ = scanHud.isHovering ? scanHud.cursorZ : persistentHudZ
   const isPersistentHud = showPersistentHud && !scanHud.isHovering
 
+  const dispersionResult = useMemo(() => {
+    const lambda = systemState.wavelengths?.[0] ?? 587.6
+    const pulseFs = systemState.pulseWidthFs ?? 100
+    return computeDispersion(
+      surfaces.map((s) => ({
+        thickness: s.thickness,
+        material: s.material,
+        type: s.type,
+        refractiveIndex: s.refractiveIndex,
+      })),
+      lambda,
+      pulseFs
+    )
+  }, [surfaces, systemState.wavelengths, systemState.pulseWidthFs])
+
   // Debug: HUD vs Diamond alignment — Diamond_RMS < HUD_RMS => math OK, rendering bug; HUD_RMS < Diamond_RMS => backend search bug
   if (DEBUG_FOCUS_ALIGNMENT && showHud && bestFocusZ != null && traceResult?.metricsSweep?.length) {
     const now = Date.now()
@@ -970,6 +1038,21 @@ export function OpticalViewport({
             <Play className="w-5 h-5" fill="currentColor" strokeWidth={0} />
           )}
           {isTracing ? 'Tracing…' : 'Trace'}
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={handleMonteCarlo}
+          disabled={isMonteCarloRunning}
+          title="Run Monte Carlo (100 iterations with tolerance jitter) — set R±, T±, Tilt± in System Editor"
+          className="flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-cyan-electric/50 hover:bg-cyan-electric/15 text-cyan-electric"
+        >
+          {isMonteCarloRunning ? (
+            <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+          ) : (
+            <Dices className="w-4 h-4" strokeWidth={2} />
+          )}
+          {isMonteCarloRunning ? 'Monte Carlo…' : 'Monte Carlo'}
         </motion.button>
         <div className="flex items-center gap-3">
           <span className="text-slate-400 text-sm whitespace-nowrap">Rays</span>
@@ -1203,6 +1286,17 @@ export function OpticalViewport({
             />
           )}
 
+          {beamEnvelopePath && (
+            <path
+              d={beamEnvelopePath}
+              fill="rgba(34, 211, 238, 0.15)"
+              stroke="rgba(34, 211, 238, 0.5)"
+              strokeWidth="1"
+              opacity="0.9"
+              pointerEvents="none"
+            />
+          )}
+
           <g filter="url(#lens-glow)">
             {lensElements.map((el) => {
               const isSelected = selectedSurfaceId === el.surfaceId
@@ -1306,6 +1400,63 @@ export function OpticalViewport({
               })}
             </g>
           ))}
+
+          {/* Monte Carlo spot diagram (point cloud) at image plane */}
+          {monteCarloResult?.spots?.length && bestFocusSvgX != null && (
+            <g key="monte-carlo-spot">
+              <defs>
+                <clipPath id="spot-diagram-clip">
+                  <rect x={bestFocusSvgX + 12} y={cy - 44} width={88} height={88} rx={4} />
+                </clipPath>
+              </defs>
+              <rect
+                x={bestFocusSvgX + 12}
+                y={cy - 44}
+                width={88}
+                height={88}
+                rx={4}
+                fill="rgba(15, 23, 42, 0.85)"
+                stroke="rgba(34, 211, 238, 0.5)"
+                strokeWidth="1"
+              />
+              <g clipPath="url(#spot-diagram-clip)">
+                {monteCarloResult.spots.map(([sx, sy], i) => {
+                  const spotScale = 60
+                  const cx_spot = bestFocusSvgX + 56
+                  const cy_spot = cy
+                  const px = cx_spot + sx * spotScale
+                  const py = cy_spot - sy * spotScale
+                  return (
+                    <circle
+                      key={i}
+                      cx={px}
+                      cy={py}
+                      r="1"
+                      fill="rgba(34, 211, 238, 0.4)"
+                    />
+                  )
+                })}
+              </g>
+              <text
+                x={bestFocusSvgX + 56}
+                y={cy - 32}
+                textAnchor="middle"
+                fill="#94a3b8"
+                fontSize={9}
+              >
+                {`Spot (n=${monteCarloResult.numValid ?? 0})`}
+              </text>
+              <text
+                x={bestFocusSvgX + 56}
+                y={cy + 38}
+                textAnchor="middle"
+                fill="#22D3EE"
+                fontSize={9}
+              >
+                {`RMS ${((monteCarloResult.rmsSpread ?? 0) * 1000).toFixed(2)} µm`}
+              </text>
+            </g>
+          )}
 
           <AnimatePresence>
             {showBestFocus && bestFocusSvgX != null && hasTraced && totalRays > 0 && (
@@ -1439,7 +1590,7 @@ export function OpticalViewport({
 
           {showHud && (
             <motion.div
-              className={`pointer-events-none z-50 rounded-lg px-3 py-2 backdrop-blur-[12px] bg-slate-900/70 border ${
+              className={`z-50 rounded-lg px-3 py-2 backdrop-blur-[12px] bg-slate-900/70 border ${
                 scanHud.snappedSurfaceIndex != null ? 'border-white/60' : 'border-cyan-electric/50'
               } ${isPersistentHud ? 'absolute bottom-20 left-4' : 'fixed'}`}
               style={{
@@ -1451,6 +1602,39 @@ export function OpticalViewport({
               transition={{ type: 'spring', stiffness: 200, damping: 20 }}
               exit={{ opacity: 0, scale: 0.95 }}
             >
+              <div className="flex gap-1 mb-2 border-b border-white/10 pb-2" style={{ pointerEvents: isPersistentHud ? 'auto' : 'none' }}>
+                <button
+                  type="button"
+                  onClick={() => setHudTab('geometry')}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${hudTab === 'geometry' ? 'bg-cyan-electric/40 text-cyan-electric' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  Geometry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHudTab('ultrafast')}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${hudTab === 'ultrafast' ? 'bg-cyan-electric/40 text-cyan-electric' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  Ultrafast
+                </button>
+              </div>
+              {hudTab === 'ultrafast' ? (
+                <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs pointer-events-none">
+                  <HudRow label="GDD:" value={`${dispersionResult.gddFs2.toFixed(2)} fs²`} metricId="gdd" highlightedMetric={highlightedMetric} labelColor="#22D3EE" />
+                  <HudRow label="TOD:" value={`${dispersionResult.todFs3.toFixed(2)} fs³`} metricId="tod" highlightedMetric={highlightedMetric} labelColor="#22D3EE" />
+                  <div className="col-span-2 flex justify-between gap-2 border-t border-white/10 mt-1 pt-1">
+                    <span className="text-slate-400">Input Pulse:</span>
+                    <span className="text-slate-300 tabular-nums">{systemState.pulseWidthFs ?? 100} fs</span>
+                  </div>
+                  <div className="col-span-2 flex justify-between gap-2">
+                    <span className="text-slate-400 font-medium">Predicted Exit Pulse:</span>
+                    <span className="text-cyan-electric tabular-nums font-medium">
+                      {dispersionResult.predictedExitPulseWidthFs.toFixed(2)} fs
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
               {scanHud.snappedSurfaceIndex != null && !isPersistentHud && (() => {
                 const s = surfaces[scanHud.snappedSurfaceIndex!]
                 const label = s
@@ -1516,6 +1700,24 @@ export function OpticalViewport({
                     </span>
                   </div>
                 )}
+                {traceResult?.gaussianBeam && (
+                  <>
+                    <HudRow
+                      label="Spot Size (w₀):"
+                      value={`${(traceResult.gaussianBeam.spotSizeAtFocus * 1000).toFixed(2)} µm`}
+                      metricId="spotSize"
+                      highlightedMetric={highlightedMetric}
+                      labelColor="#22D3EE"
+                    />
+                    <HudRow
+                      label="Rayleigh Range (z_R):"
+                      value={`${traceResult.gaussianBeam.rayleighRange.toFixed(2)} mm`}
+                      metricId="rayleigh"
+                      highlightedMetric={highlightedMetric}
+                      labelColor="#22D3EE"
+                    />
+                  </>
+                )}
                 {traceResult?.metricsSweep?.length && (
                   <>
                     <div className="col-span-2 mt-1.5 pt-1.5 border-t border-white/10">
@@ -1542,6 +1744,8 @@ export function OpticalViewport({
                   </>
                 )}
               </div>
+                </>
+              )}
             </motion.div>
           )}
             </>

@@ -26,6 +26,9 @@ function normalizeSurface(s: Partial<Surface> & { n?: number }, _i: number): Sur
     diameter: Number(s.diameter) || d.diameter,
     material: String(s.material ?? 'Air'),
     description: String(s.description ?? ''),
+    radiusTolerance: s.radiusTolerance != null ? Number(s.radiusTolerance) : undefined,
+    thicknessTolerance: s.thicknessTolerance != null ? Number(s.thicknessTolerance) : undefined,
+    tiltTolerance: s.tiltTolerance != null ? Number(s.tiltTolerance) : undefined,
   }
 }
 
@@ -47,6 +50,8 @@ function loadLastDesign(): SystemState | null {
       fieldAngles: Array.isArray(optical_stack.fieldAngles) ? optical_stack.fieldAngles.map(Number) : DEFAULT_SYSTEM_STATE.fieldAngles,
       numRays: Number(optical_stack.numRays) || 9,
       focusMode: optical_stack.focusMode === 'Balanced' ? 'Balanced' : 'On-Axis',
+      m2Factor: Math.max(0.1, Math.min(10, Number(optical_stack.m2Factor) || 1)),
+      pulseWidthFs: Math.max(5, Math.min(10000, Number(optical_stack.pulseWidthFs) || 100)),
       hasTraced: false,
       traceResult: null,
       traceError: null,
@@ -80,6 +85,8 @@ function App() {
       fieldAngles: systemState.fieldAngles,
       numRays: systemState.numRays,
       focusMode: systemState.focusMode ?? 'On-Axis',
+      m2Factor: systemState.m2Factor ?? 1.0,
+      pulseWidthFs: systemState.pulseWidthFs ?? 100,
       totalLength: systemState.totalLength,
       fNumber: systemState.fNumber,
       rmsSpotRadius: systemState.rmsSpotRadius,
