@@ -6,10 +6,11 @@ const DEBUG_HUD_COORDS = import.meta.env.DEV
 const DEBUG_FOCUS_ALIGNMENT = import.meta.env.DEV
 import { motion, AnimatePresence } from 'framer-motion'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
-import { Play, Loader2, ZoomIn, ZoomOut, Maximize2, Dices } from 'lucide-react'
+import { Play, Loader2, ZoomIn, ZoomOut, Maximize2, Dices, LineChart } from 'lucide-react'
 import type { SystemState, TraceResult, MetricsAtZ } from '../types/system'
 import type { HighlightedMetric } from '../types/ui'
 import { traceOpticalStack, runMonteCarlo, type MonteCarloResponse } from '../api/trace'
+import { ChromaticAberrationOverlay } from './ChromaticAberrationOverlay'
 import { config } from '../config'
 import { computeDispersion } from '../lib/dispersion'
 
@@ -546,6 +547,7 @@ export function OpticalViewport({
   const [isPanning, setIsPanning] = useState(false)
   const [isSpaceHeld, setIsSpaceHeld] = useState(false)
   const [showCausticEnvelope, setShowCausticEnvelope] = useState(false)
+  const [showLcaMap, setShowLcaMap] = useState(false)
   const [fieldFilter, setFieldFilter] = useState<number | null>(null)
   const [hudTab, setHudTab] = useState<'geometry' | 'ultrafast'>('geometry')
   const [hintVisible, setHintVisible] = useState(false)
@@ -1159,6 +1161,16 @@ export function OpticalViewport({
             Caustic Envelope
           </label>
         )}
+        <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={showLcaMap}
+            onChange={(e) => setShowLcaMap(e.target.checked)}
+            className="rounded accent-cyan-electric"
+          />
+          <LineChart className="w-4 h-4 text-slate-400" strokeWidth={2} />
+          Show LCA Map
+        </label>
         {hasTraced && (
           <div className="flex items-center gap-2">
             <span className="text-slate-400 text-sm whitespace-nowrap">Field</span>
@@ -1237,6 +1249,7 @@ export function OpticalViewport({
         onMouseEnter={handleViewportMouseEnter}
         onMouseLeave={handleViewportMouseLeave}
       >
+        {showLcaMap && <ChromaticAberrationOverlay systemState={systemState} />}
         <TransformWrapper
           initialScale={1}
           minScale={0.1}

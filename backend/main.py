@@ -21,7 +21,7 @@ from pydantic import BaseModel
 _root = os.path.dirname(os.path.abspath(__file__))
 if _root not in sys.path:
     sys.path.insert(0, _root)
-from trace_service import run_trace
+from trace_service import run_trace, run_chromatic_shift
 
 app = FastAPI(title="Optics Trace API", version="0.1.0")
 
@@ -94,6 +94,30 @@ def trace_rays(req: OpticalStackRequest):
     """
     optical_stack = req.model_dump()
     return run_trace(optical_stack)
+
+
+class ChromaticShiftRequest(OpticalStackRequest):
+    """Optical stack + optional wavelength range for chromatic analysis."""
+    wavelength_min_nm: float = 400.0
+    wavelength_max_nm: float = 1100.0
+    wavelength_step_nm: float = 10.0
+
+
+@app.post("/api/analysis/chromatic-shift")
+def chromatic_shift(req: ChromaticShiftRequest):
+    """
+    Chromatic focus shift: for each wavelength in range (default 400–1100 nm, 10 nm steps),
+    recalculate refractive index for every lens material via Sellmeier and return
+    paraxial focus distance from last surface (BFL).
+    Returns: [{ wavelength: number, focus_shift: number }, ...]
+    """
+    optical_stack = req.model_dump()
+    return run_chromatic_shift(
+        optical_stack,
+        wavelength_min_nm=req.wavelength_min_nm,
+        wavelength_max_nm=req.wavelength_max_nm,
+        wavelength_step_nm=req.wavelength_step_nm,
+    )
 
 
 @app.post("/api/monte-carlo")

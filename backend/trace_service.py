@@ -334,6 +334,56 @@ def optical_stack_to_surf_data(surfaces, wvl_nm=587.6):
     return surf_data_list
 
 
+def run_chromatic_shift(
+    optical_stack: dict,
+    wavelength_min_nm: float = 400.0,
+    wavelength_max_nm: float = 1100.0,
+    wavelength_step_nm: float = 10.0,
+) -> list:
+    """
+    Chromatic focus shift: for each wavelength, recalculate n(λ) via Sellmeier
+    and return paraxial focus distance from last surface (BFL).
+
+    Returns list of { wavelength: float, focus_shift: float } in mm.
+    """
+    from singlet_rayoptics import build_singlet_from_surface_data, get_focal_length
+
+    surfaces = optical_stack.get("surfaces", [])
+    if not surfaces:
+        return []
+
+    epd = float(optical_stack.get("entrancePupilDiameter", 10) or 10)
+    surface_diameters = [float(s.get("diameter", 25) or 25) for s in surfaces]
+
+    wavelengths = []
+    w = wavelength_min_nm
+    while w <= wavelength_max_nm:
+        wavelengths.append(w)
+        w += wavelength_step_nm
+
+    result = []
+    for wvl_nm in wavelengths:
+        surf_data_list = optical_stack_to_surf_data(surfaces, wvl_nm=wvl_nm)
+        try:
+            opt_model = build_singlet_from_surface_data(
+                surf_data_list,
+                wvl_nm=wvl_nm,
+                radius_mode=False,
+                object_distance=1e10,
+                epd=epd,
+                surface_diameters=surface_diameters,
+            )
+            opt_model.update_model()
+            opt_model.optical_spec.update_optical_properties()
+            _, fod = get_focal_length(opt_model)
+            bfl = fod.bfl if (fod and np.isfinite(fod.bfl)) else float("nan")
+            result.append({"wavelength": float(wvl_nm), "focus_shift": float(bfl)})
+        except Exception:
+            result.append({"wavelength": float(wvl_nm), "focus_shift": float("nan")})
+
+    return result
+
+
 def run_trace(optical_stack: dict) -> dict:
     """
     Run ray trace on optical_stack from frontend.
