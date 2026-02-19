@@ -416,6 +416,7 @@ def run_trace(optical_stack: dict) -> dict:
     extend_left = 50.0
     rays_by_field = []
     rays = []
+    ray_field_indices = []
     for fld_idx, fld_obj in enumerate(osp.field_of_view.fields):
         ray_list = analyses.trace_ray_list(
             opt_model, pupil_coords, fld_obj, wvl_nm, foc=0.0, check_apertures=True
@@ -436,6 +437,7 @@ def run_trace(optical_stack: dict) -> dict:
             if len(poly) > 1:
                 field_rays.append(poly)
                 rays.append(poly)
+                ray_field_indices.append(fld_idx)
         rays_by_field.append(field_rays)
 
     # Performance
@@ -467,6 +469,7 @@ def run_trace(optical_stack: dict) -> dict:
 
     return {
         "rays": rays,
+        "rayFieldIndices": ray_field_indices,
         "surfaces": surface_curves,
         "focusZ": float(focus_z),
         "bestFocusZ": best_focus_z,

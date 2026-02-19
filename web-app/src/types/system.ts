@@ -22,6 +22,8 @@ export type MetricsAtZ = {
 
 export type TraceResult = {
   rays: number[][][]
+  /** Per-ray field index for correct color mapping (backend provides this) */
+  rayFieldIndices?: number[]
   surfaces: number[][][]
   focusZ: number
   bestFocusZ?: number

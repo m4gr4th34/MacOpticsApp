@@ -9,6 +9,7 @@ import { config } from '../config'
 
 export type TraceResponse = {
   rays?: number[][][]  // [[[z,y], ...], ...] per ray
+  rayFieldIndices?: number[]  // field index per ray for correct color mapping
   surfaces?: number[][][]  // [[[z,y], ...], ...] per surface curve
   focusZ?: number
   bestFocusZ?: number

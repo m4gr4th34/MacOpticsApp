@@ -544,6 +544,7 @@ export function OpticalViewport({
           hasTraced: true,
           traceResult: {
             rays: res.rays ?? [],
+            rayFieldIndices: res.rayFieldIndices,
             surfaces: res.surfaces ?? [],
             focusZ: res.focusZ ?? 0,
             bestFocusZ: res.bestFocusZ,
@@ -666,25 +667,40 @@ export function OpticalViewport({
     return elements
   }, [surfaces, zPositions, epd, scale, xOffset, cy])
 
-  // Rays: backend data or paraxial fallback. Colors by field index (cyan=on-axis, orange=mid, green=edge).
-  const rays = useMemo(() => {
+  // Rays grouped by field angle for robust color inheritance. Each group gets one stroke color.
+  const raysByField = useMemo(() => {
     if (!hasTraced) return []
     if (traceResult?.rays?.length) {
       const fieldAngles = systemState.fieldAngles || [0]
       const numFields = Math.max(1, fieldAngles.length)
-      const raysPerField = Math.ceil(traceResult.rays.length / numFields)
+      const indices = traceResult.rayFieldIndices
       const colors = config.rayColors
-      return traceResult.rays.map((pts, i) => {
-        const fieldIndex = Math.min(Math.floor(i / raysPerField), numFields - 1)
+      const groups: Map<number, Ray[]> = new Map()
+      traceResult.rays.forEach((pts, i) => {
+        const fieldIndex =
+          indices && indices[i] != null
+            ? Math.min(indices[i], numFields - 1)
+            : Math.min(Math.floor(i / Math.ceil(traceResult!.rays!.length / numFields)), numFields - 1)
         const color = colors[Math.min(fieldIndex, colors.length - 1)]
-        return {
+        const ray: Ray = {
           points: pts.map(([z, y]) => ({ x: z, y })),
           color,
         }
+        if (!groups.has(fieldIndex)) groups.set(fieldIndex, [])
+        groups.get(fieldIndex)!.push(ray)
       })
+      return Array.from(groups.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([fieldIndex, rays]) => ({
+          color: colors[Math.min(fieldIndex, colors.length - 1)],
+          rays,
+        }))
     }
-    return generateRays(numRays, lensX1, lensX2, focusX, semiHeight)
+    const fallbackRays = generateRays(numRays, lensX1, lensX2, focusX, semiHeight)
+    return [{ color: config.rayColors[0], rays: fallbackRays }]
   }, [hasTraced, traceResult, numRays, lensX1, lensX2, focusX, semiHeight, systemState.fieldAngles])
+
+  const totalRays = raysByField.reduce((n, g) => n + g.rays.length, 0)
 
   const bestFocusZ = traceResult?.bestFocusZ
   const bestFocusSvgX = bestFocusZ != null ? bestFocusZ * scale + xOffset : null
@@ -1174,36 +1190,46 @@ export function OpticalViewport({
             })}
           </g>
 
-          {rays.map((ray, i) => {
-            const d = ray.points
-              .map((p, j) => `${j === 0 ? 'M' : 'L'} ${toSvg(p.x, p.y)}`)
-              .join(' ')
-            return (
-              <motion.path
-                key={i}
-                d={d}
-                fill="none"
-                stroke={ray.color}
-                strokeWidth="1.2"
-                strokeOpacity="0.9"
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={
-                  isTracing
-                    ? { pathLength: 1, opacity: [0.5, 1, 0.5] }
-                    : { pathLength: 1, opacity: 0.9 }
-                }
-                transition={
-                  isTracing
-                    ? { opacity: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } }
-                    : { duration: 0.6, delay: i * 0.03 }
-                }
-                style={{ filter: `drop-shadow(0 0 2px ${ray.color})` }}
-              />
-            )
-          })}
+          {raysByField.map((group, groupIdx) => (
+            <g
+              key={groupIdx}
+              stroke={group.color}
+              strokeWidth="1.2"
+              strokeOpacity="0.9"
+              fill="none"
+              style={{ filter: `drop-shadow(0 0 2px ${group.color})` }}
+            >
+              {group.rays.map((ray, rayIdx) => {
+                const d = ray.points
+                  .map((p, j) => `${j === 0 ? 'M' : 'L'} ${toSvg(p.x, p.y)}`)
+                  .join(' ')
+                const globalIdx = raysByField
+                  .slice(0, groupIdx)
+                  .reduce((n, g) => n + g.rays.length, 0) + rayIdx
+                return (
+                  <motion.path
+                    key={`field-${groupIdx}-ray-${rayIdx}`}
+                    d={d}
+                    fill="none"
+                    initial={{ pathLength: 0, opacity: 0 }}
+                    animate={
+                      isTracing
+                        ? { pathLength: 1, opacity: [0.5, 1, 0.5] }
+                        : { pathLength: 1, opacity: 0.9 }
+                    }
+                    transition={
+                      isTracing
+                        ? { opacity: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } }
+                        : { duration: 0.6, delay: globalIdx * 0.03 }
+                    }
+                  />
+                )
+              })}
+            </g>
+          ))}
 
           <AnimatePresence>
-            {showBestFocus && bestFocusSvgX != null && hasTraced && rays.length > 0 && (
+            {showBestFocus && bestFocusSvgX != null && hasTraced && totalRays > 0 && (
               <motion.g
                 key="focus-diamond"
                 initial={{ x: bestFocusSvgX, y: cy, opacity: 0, scale: 0 }}
