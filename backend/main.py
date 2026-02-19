@@ -103,6 +103,19 @@ class ChromaticShiftRequest(OpticalStackRequest):
     wavelength_step_nm: float = 10.0
 
 
+@app.post("/api/analysis/optimize-colors")
+def optimize_colors(req: OpticalStackRequest):
+    """
+    Local search to find a second glass that, when paired with the current lens
+    in a doublet configuration, minimizes Longitudinal Chromatic Aberration
+    (BFL_max - BFL_min) between 486 nm and 656 nm.
+    Returns: { recommended_glass: str, estimated_lca_reduction: number }
+    """
+    from optimize_colors import run_optimize_colors
+    optical_stack = req.model_dump()
+    return run_optimize_colors(optical_stack)
+
+
 @app.post("/api/analysis/chromatic-shift")
 def chromatic_shift(req: ChromaticShiftRequest):
     """

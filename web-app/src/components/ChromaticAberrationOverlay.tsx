@@ -5,9 +5,10 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2 } from 'lucide-react'
-import type { SystemState } from '../types/system'
+import { Loader2, X } from 'lucide-react'
+import type { SystemState, Surface } from '../types/system'
 import { fetchChromaticShift, type ChromaticShiftPoint } from '../api/chromatic'
+import { fetchOptimizeColors } from '../api/optimizeColors'
 
 const CHART_WIDTH = 220
 const CHART_HEIGHT = 150
@@ -41,12 +42,15 @@ function wavelengthToColor(nm: number): string {
 
 type ChromaticAberrationOverlayProps = {
   systemState: SystemState
+  onSystemStateChange: (state: SystemState | ((prev: SystemState) => SystemState)) => void
 }
 
-export function ChromaticAberrationOverlay({ systemState }: ChromaticAberrationOverlayProps) {
+export function ChromaticAberrationOverlay({ systemState, onSystemStateChange }: ChromaticAberrationOverlayProps) {
   const [data, setData] = useState<ChromaticShiftPoint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [optimizeLoading, setOptimizeLoading] = useState(false)
+  const [optimizeResult, setOptimizeResult] = useState<{ recommended_glass: string; estimated_lca_reduction: number } | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchData = useCallback(() => {
@@ -82,13 +86,24 @@ export function ChromaticAberrationOverlay({ systemState }: ChromaticAberrationO
     systemState.m2Factor,
   ])
 
+  const prevSurfacesRef = useRef(systemState.surfaces)
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(fetchData, 300)
+    const surfacesChanged =
+      prevSurfacesRef.current.length !== systemState.surfaces.length ||
+      prevSurfacesRef.current.some((s, i) => systemState.surfaces[i]?.material !== s.material)
+    prevSurfacesRef.current = systemState.surfaces
+    if (surfacesChanged) {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = null
+      fetchData()
+    } else {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(fetchData, 300)
+    }
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [fetchData])
+  }, [fetchData, systemState.surfaces])
 
   const designWvl = systemState.wavelengths?.[0] ?? 587.6
   const designPoint = data.find((p) => Math.abs(p.wavelength - designWvl) < 15)
@@ -141,16 +156,76 @@ export function ChromaticAberrationOverlay({ systemState }: ChromaticAberrationO
 
   const handleChartMouseLeave = useCallback(() => setTooltip(null), [])
 
+  const currentLca =
+    validData.length >= 2
+      ? (() => {
+          const b486 = validData.find((p) => Math.abs(p.wavelength - 486) < 20)
+          const b656 = validData.find((p) => Math.abs(p.wavelength - 656) < 20)
+          if (!b486 || !b656) return null
+          return Math.abs(b486.focus_shift - b656.focus_shift)
+        })()
+      : null
+
+  const reductionPct =
+    optimizeResult && currentLca != null && currentLca > 0
+      ? Math.round((optimizeResult.estimated_lca_reduction / currentLca) * 100)
+      : null
+
+  const handleOptimize = useCallback(() => {
+    setOptimizeLoading(true)
+    setOptimizeResult(null)
+    fetchOptimizeColors({
+      surfaces: systemState.surfaces,
+      entrancePupilDiameter: systemState.entrancePupilDiameter ?? 10,
+      wavelengths: systemState.wavelengths ?? [587.6],
+      fieldAngles: systemState.fieldAngles ?? [0],
+      numRays: systemState.numRays ?? 9,
+      focusMode: systemState.focusMode ?? 'On-Axis',
+      m2Factor: systemState.m2Factor ?? 1.0,
+    })
+      .then((res) => setOptimizeResult(res))
+      .catch(() => setOptimizeResult({ recommended_glass: '', estimated_lca_reduction: 0 }))
+      .finally(() => setOptimizeLoading(false))
+  }, [systemState])
+
+  const handleApply = useCallback(() => {
+    if (!optimizeResult?.recommended_glass || systemState.surfaces.length !== 2) return
+    const s0 = systemState.surfaces[0]
+    const s1 = systemState.surfaces[1]
+    if (s0.type !== 'Glass' || s1.type !== 'Air') return
+    const newSurface: Surface = {
+      id: crypto.randomUUID(),
+      type: 'Glass',
+      radius: s1.radius,
+      thickness: s0.thickness / 2,
+      refractiveIndex: 1.6,
+      diameter: s0.diameter,
+      material: optimizeResult.recommended_glass,
+      description: optimizeResult.recommended_glass,
+    }
+    onSystemStateChange((prev) => {
+      const next = prev.surfaces.map((s, i) =>
+        i === 1 ? { ...s, radius: -s.radius } : { ...s }
+      )
+      next.splice(1, 0, newSurface)
+      return {
+        ...prev,
+        surfaces: next,
+        traceResult: null,
+        traceError: null,
+      }
+    })
+    setOptimizeResult(null)
+  }, [optimizeResult, systemState.surfaces, onSystemStateChange])
+
   return (
     <motion.div
-      className="absolute z-[40]"
+      className="absolute z-[40] flex flex-col gap-2"
       style={{
         bottom: 16,
         left: 16,
         width: 240,
         maxWidth: 240,
-        height: 180,
-        maxHeight: 180,
         pointerEvents: 'auto',
       }}
       initial={{ opacity: 0, y: 12, scale: 0.95 }}
@@ -158,7 +233,7 @@ export function ChromaticAberrationOverlay({ systemState }: ChromaticAberrationO
       transition={{ type: 'spring', stiffness: 300, damping: 24 }}
     >
       <div
-        className="rounded-lg border border-slate-700 bg-slate-900/80 backdrop-blur-md shadow-2xl px-2 py-2 w-full h-full overflow-hidden"
+        className="rounded-lg border border-slate-700 bg-slate-900/80 backdrop-blur-md shadow-2xl px-2 py-2 overflow-hidden"
       >
         <div className="text-[10px] font-medium text-slate-400 mb-1 px-1">Chromatic Aberration</div>
         <AnimatePresence mode="wait">
@@ -290,6 +365,55 @@ export function ChromaticAberrationOverlay({ systemState }: ChromaticAberrationO
           </div>
         )}
       </div>
+
+      <motion.button
+        type="button"
+        onClick={handleOptimize}
+        disabled={optimizeLoading || systemState.surfaces.length !== 2}
+        className="w-full py-2 px-3 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-indigo-500 hover:from-cyan-400 hover:to-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+      >
+        {optimizeLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+            Optimizing…
+          </span>
+        ) : (
+          'Optimize Colors'
+        )}
+      </motion.button>
+
+      <AnimatePresence>
+        {optimizeResult?.recommended_glass && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="rounded-lg border border-slate-700 bg-slate-900/80 backdrop-blur-md shadow-2xl p-3"
+          >
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <p className="text-xs text-slate-300">
+                Pair with <span className="font-semibold text-cyan-400">{optimizeResult.recommended_glass}</span>
+                {reductionPct != null ? ` to reduce shift by ${reductionPct}%` : ` (${optimizeResult.estimated_lca_reduction.toFixed(2)} mm)`}
+              </p>
+              <button
+                type="button"
+                onClick={() => setOptimizeResult(null)}
+                className="p-0.5 rounded text-slate-500 hover:text-slate-300"
+                aria-label="Close"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={2} />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="w-full py-1.5 px-3 rounded text-xs font-medium bg-gradient-to-r from-cyan-500 to-indigo-500 text-white hover:from-cyan-400 hover:to-indigo-400 transition-all"
+            >
+              Apply
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

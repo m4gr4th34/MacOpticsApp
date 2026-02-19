@@ -1249,7 +1249,12 @@ export function OpticalViewport({
         onMouseEnter={handleViewportMouseEnter}
         onMouseLeave={handleViewportMouseLeave}
       >
-        {showLcaMap && <ChromaticAberrationOverlay systemState={systemState} />}
+        {showLcaMap && (
+          <ChromaticAberrationOverlay
+            systemState={systemState}
+            onSystemStateChange={onSystemStateChange}
+          />
+        )}
         <TransformWrapper
           initialScale={1}
           minScale={0.1}
