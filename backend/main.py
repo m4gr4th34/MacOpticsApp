@@ -13,7 +13,7 @@ if not hasattr(np, "NaN"):
 
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -144,6 +144,28 @@ def monte_carlo(req: OpticalStackRequest):
     optical_stack = req.model_dump()
     iterations = optical_stack.pop("iterations", None) or 100
     return run_monte_carlo(optical_stack, iterations=iterations)
+
+
+@app.post("/api/import/lens-system")
+async def import_lens_system(file: UploadFile = File(...)):
+    """
+    Import lens system from .json (Zemax-style) or .svg file.
+    Returns { surfaces: Surface[] } ready for the frontend.
+    """
+    from optical_importer import import_lens_system as do_import
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        surfaces = do_import(content, file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"surfaces": surfaces}
 
 
 @app.get("/api/materials/n")

@@ -2,10 +2,11 @@ import { useRef, useEffect, useLayoutEffect, useState } from 'react'
 import ReactDOM from 'react-dom'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import { motion } from 'framer-motion'
-import { ChevronDown, GripVertical, Plus, Trash2, Search } from 'lucide-react'
+import { ChevronDown, GripVertical, Plus, Trash2, Search, FileUp, X } from 'lucide-react'
 import type { SystemState, Surface } from '../types/system'
 import { config } from '../config'
 import { fetchMaterials, nFromCoeffs, type MaterialOption } from '../api/materials'
+import { importLensSystem } from '../api/importLens'
 
 /** Fallback when API is unavailable */
 const GLASS_LIBRARY_FALLBACK: MaterialOption[] = [
@@ -14,13 +15,6 @@ const GLASS_LIBRARY_FALLBACK: MaterialOption[] = [
   { name: 'Fused Silica', n: 1.458 },
   { name: 'N-SF11', n: 1.78472 },
   { name: 'N-SF5', n: 1.6727 },
-]
-
-/** Surface shape presets: radius (mm) and thickness (mm) */
-const SURFACE_PRESETS: { name: string; radius: number; thickness: number }[] = [
-  { name: 'Biconvex', radius: 100, thickness: 6 },
-  { name: 'Plano-Convex', radius: 100, thickness: 5 },
-  { name: 'Meniscus', radius: 70, thickness: 4 },
 ]
 
 type SystemEditorProps = {
@@ -285,10 +279,91 @@ export function SystemEditor({
   const surfaces = systemState.surfaces
   const highSensitivityIndices = getHighSensitivityIndices(sensitivityBySurface)
   const [glassMaterials, setGlassMaterials] = useState<MaterialOption[]>(GLASS_LIBRARY_FALLBACK)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [importPreview, setImportPreview] = useState<{
+    surfaces: Surface[]
+    insertIndex: number
+  } | null>(null)
+  const [ignoredImportIds, setIgnoredImportIds] = useState<Set<string>>(new Set())
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchMaterials().then(setGlassMaterials)
   }, [])
+
+  useEffect(() => {
+    if (!toastMessage) return
+    const t = setTimeout(() => setToastMessage(null), config.toastDuration)
+    return () => clearTimeout(t)
+  }, [toastMessage])
+
+  const activeIndex =
+    selectedSurfaceId != null
+      ? surfaces.findIndex((s) => s.id === selectedSurfaceId)
+      : surfaces.length
+  const insertIndex = activeIndex >= 0 ? activeIndex : surfaces.length
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    setToastMessage('Processing Drawing...')
+    try {
+      const { surfaces: imported } = await importLensSystem(file)
+      setToastMessage(null)
+      if (imported.length === 0) {
+        setToastMessage('No surfaces found in file.')
+        return
+      }
+      setIgnoredImportIds(new Set())
+      setImportPreview({ surfaces: imported, insertIndex })
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : 'Import failed')
+    }
+  }
+
+  const toggleImportIgnore = (id: string) => {
+    setIgnoredImportIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const confirmImport = () => {
+    if (!importPreview) return
+    const toAdd = importPreview.surfaces.filter((s) => !ignoredImportIds.has(s.id))
+    if (toAdd.length > 0) {
+      onSystemStateChange((prev) => {
+        const next = [...prev.surfaces]
+        next.splice(importPreview.insertIndex, 0, ...toAdd)
+        return {
+          ...prev,
+          surfaces: next,
+          traceResult: null,
+          traceError: null,
+        }
+      })
+      setToastMessage(
+        toAdd.length > 1
+          ? `Imported ${toAdd.length} surfaces from ISO drawing.`
+          : 'Imported 1 surface from ISO drawing.'
+      )
+    }
+    setImportPreview(null)
+    setIgnoredImportIds(new Set())
+  }
+
+  const cancelImport = () => {
+    setImportPreview(null)
+    setIgnoredImportIds(new Set())
+  }
 
   const addSurfaceAtStart = () => addSurfaceAtIndex(0)
 
@@ -357,7 +432,27 @@ export function SystemEditor({
 
   return (
     <div className="p-4">
-      <h2 className="text-cyan-electric font-semibold text-lg mb-4">System Editor</h2>
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <h2 className="text-cyan-electric font-semibold text-lg">System Editor</h2>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.svg,.csv"
+            onChange={handleFileChange}
+            className="hidden"
+            aria-hidden
+          />
+          <button
+            type="button"
+            onClick={handleImportClick}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors"
+          >
+            <FileUp className="w-4 h-4" />
+            Import
+          </button>
+        </div>
+      </div>
       <div className="overflow-x-auto overflow-y-visible rounded-lg">
         <DragDropContext onDragEnd={onDragEnd}>
         <table className="w-full text-sm border-collapse overflow-visible">
@@ -436,43 +531,15 @@ export function SystemEditor({
                 </td>
                 <td className="py-2 pr-4 text-slate-400">{i + 1}</td>
                 <td className="py-2 pr-4">
-                  <div className="flex gap-1">
-                    <select
-                      value={s.type}
-                      onChange={(e) => updateSurface(s.id, { type: e.target.value as 'Glass' | 'Air' })}
-                      onClick={(e) => e.stopPropagation()}
-                      className={inputClass}
-                    >
-                      <option value="Glass">Glass</option>
-                      <option value="Air">Air</option>
-                    </select>
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (!v) return
-                        e.target.value = ''
-                        const preset = SURFACE_PRESETS.find((p) => p.name === v)
-                        if (preset) {
-                          updateSurface(s.id, {
-                            type: 'Glass',
-                            radius: preset.radius,
-                            thickness: preset.thickness,
-                          })
-                        }
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className={`${inputClass} min-w-[7rem] text-slate-500`}
-                      title="Quick Actions"
-                    >
-                      <option value="">Presets</option>
-                      {SURFACE_PRESETS.map((p) => (
-                        <option key={p.name} value={p.name}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <select
+                    value={s.type}
+                    onChange={(e) => updateSurface(s.id, { type: e.target.value as 'Glass' | 'Air' })}
+                    onClick={(e) => e.stopPropagation()}
+                    className={inputClass}
+                  >
+                    <option value="Glass">Glass</option>
+                    <option value="Air">Air</option>
+                  </select>
                 </td>
                 <td className="py-2 pr-4">
                   <input
@@ -651,6 +718,119 @@ export function SystemEditor({
         </table>
         </DragDropContext>
       </div>
+      {toastMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-slate-800/95 border border-slate-600 text-slate-200 text-sm shadow-xl backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          {toastMessage}
+        </motion.div>
+      )}
+      {importPreview &&
+        ReactDOM.createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={(e) => e.target === e.currentTarget && cancelImport()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-preview-title"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full max-w-md rounded-xl border border-slate-600 bg-slate-900 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+                <h3 id="import-preview-title" className="text-lg font-semibold text-cyan-electric">
+                  Import Preview
+                </h3>
+                <button
+                  type="button"
+                  onClick={cancelImport}
+                  className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                  aria-label="Cancel import"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                <p className="text-sm text-slate-400 mb-3">
+                  {importPreview.surfaces.length} surface{importPreview.surfaces.length !== 1 ? 's' : ''} found. Check &quot;Ignore&quot; to exclude from import.
+                </p>
+                <div className="overflow-x-auto rounded-lg border border-slate-700">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-800/80 text-left text-slate-400">
+                        <th className="py-2 px-3 w-12">Ignore</th>
+                        <th className="py-2 px-3 w-10">#</th>
+                        <th className="py-2 px-3">Radius (mm)</th>
+                        <th className="py-2 px-3">Material</th>
+                        <th className="py-2 px-3">Thickness (mm)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.surfaces.map((s, i) => (
+                        <tr
+                          key={s.id}
+                          className={`border-t border-slate-700/80 ${
+                            ignoredImportIds.has(s.id) ? 'opacity-50 bg-slate-800/40' : ''
+                          }`}
+                        >
+                          <td className="py-2 px-3">
+                            <input
+                              type="checkbox"
+                              checked={ignoredImportIds.has(s.id)}
+                              onChange={() => toggleImportIgnore(s.id)}
+                              className="rounded border-slate-600 bg-slate-800 text-cyan-electric focus:ring-cyan-electric/50"
+                              aria-label={`Ignore surface ${i + 1}`}
+                            />
+                          </td>
+                          <td className="py-2 px-3 text-slate-400">{i + 1}</td>
+                          <td className="py-2 px-3 text-slate-200 font-mono">
+                            {s.radius === 0 ? '∞' : s.radius.toFixed(2)}
+                          </td>
+                          <td className="py-2 px-3 text-slate-200">{s.material}</td>
+                          <td className="py-2 px-3 text-slate-200 font-mono">
+                            {s.thickness.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  Importing {importPreview.surfaces.length - ignoredImportIds.size} of {importPreview.surfaces.length} surfaces
+                  {importPreview.insertIndex < surfaces.length
+                    ? ` at position ${importPreview.insertIndex + 1}`
+                    : ' at end'}
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-slate-700 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={cancelImport}
+                  className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmImport}
+                  disabled={importPreview.surfaces.length - ignoredImportIds.size === 0}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-slate-900 bg-cyan-electric hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Confirm Import
+                </button>
+              </div>
+            </motion.div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

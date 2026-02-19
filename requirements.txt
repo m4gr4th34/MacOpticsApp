@@ -1,7 +1,9 @@
 # FastAPI backend for optical ray-tracing
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
+python-multipart>=0.0.6
 numpy>=2.0
 scipy>=1.10.0
 rayoptics>=0.8.7
 pytest>=7.0
+svgpathtools>=1.6.0
