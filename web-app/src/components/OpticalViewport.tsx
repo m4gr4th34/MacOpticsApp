@@ -2,6 +2,8 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 
 /** Debug: log HUD z (optical mm) and RMS. Set true to diagnose HUD/line disconnect. */
 const DEBUG_HUD_COORDS = import.meta.env.DEV
+/** Debug: log HUD vs Diamond RMS to diagnose math vs rendering bug. */
+const DEBUG_FOCUS_ALIGNMENT = import.meta.env.DEV
 import { motion } from 'framer-motion'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import { Play, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
@@ -10,7 +12,96 @@ import type { HighlightedMetric } from '../types/ui'
 import { traceOpticalStack } from '../api/trace'
 import { config } from '../config'
 
-/** Mini RMS vs Z graph for HUD — shows curve and current cursor Z. */
+/** Through-Focus diagnostic: 10mm sparkline around cursor with Gold Diamond minimum line.
+ * If the dip doesn't align with the dotted line → search algorithm failure. */
+function ThroughFocusSparkline({
+  sweep,
+  cursorZ,
+  diamondZ,
+  width = 140,
+  height = 44,
+}: {
+  sweep: MetricsAtZ[]
+  cursorZ: number
+  diamondZ: number | null
+  width?: number
+  height?: number
+}) {
+  if (!sweep.length) return null
+  const halfWindow = 5
+  const zLo = cursorZ - halfWindow
+  const zHi = cursorZ + halfWindow
+  const zRange = zHi - zLo || 1
+  const windowSweep = sweep.filter((p) => p.z >= zLo - 0.01 && p.z <= zHi + 0.01)
+  if (windowSweep.length < 2) return null
+
+  const pts = windowSweep
+    .map((p) => {
+      const rms = p.rmsPerField?.length
+        ? (() => {
+            const valid = p.rmsPerField!.filter((r): r is number => r != null)
+            return valid.length > 0 ? Math.sqrt(valid.reduce((s, r) => s + r * r, 0) / valid.length) : null
+          })()
+        : p.rmsRadius
+      return { z: p.z, rms }
+    })
+    .filter(({ rms }) => rms != null) as { z: number; rms: number }[]
+  if (pts.length < 2) return null
+
+  const rmsMax = Math.max(...pts.map((p) => p.rms), 1e-6)
+  const pad = 4
+  const w = width - 2 * pad
+  const h = height - 2 * pad
+
+  const pathPts = pts.map(({ z, rms }) => {
+    const x = pad + (w * (z - zLo)) / zRange
+    const y = pad + h - (h * (rms / rmsMax))
+    return `${x},${y}`
+  })
+  const pathD = `M ${pathPts.join(' L ')}`
+
+  const cursorX = pad + (w * Math.max(0, Math.min(1, (cursorZ - zLo) / zRange)))
+  const diamondX =
+    diamondZ != null && diamondZ >= zLo && diamondZ <= zHi
+      ? pad + (w * (diamondZ - zLo)) / zRange
+      : null
+
+  return (
+    <svg width={width} height={height} className="block">
+      <path
+        d={pathD}
+        fill="none"
+        stroke="rgba(34, 211, 238, 0.9)"
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
+      />
+      <line
+        x1={cursorX}
+        y1={pad}
+        x2={cursorX}
+        y2={height - pad}
+        stroke="#f97316"
+        strokeWidth="1"
+        strokeDasharray="2 2"
+      />
+      {diamondX != null && (
+        <line
+          x1={diamondX}
+          y1={pad}
+          x2={diamondX}
+          y2={height - pad}
+          stroke="#F59E0B"
+          strokeWidth="1.5"
+          strokeDasharray="3 2"
+          opacity={0.95}
+        />
+      )}
+    </svg>
+  )
+}
+
+/** Mini RMS vs Z graph for HUD — shows curve and current cursor Z.
+ * When rmsPerField exists, plots System Average RMS (same metric Best Composite minimizes). */
 function RmsVsZGraph({
   sweep,
   currentZ,
@@ -26,16 +117,31 @@ function RmsVsZGraph({
   const zMin = sweep[0].z
   const zMax = sweep[sweep.length - 1].z
   const zRange = zMax - zMin || 1
-  const rmsVals = sweep.map((p) => p.rmsRadius).filter((r): r is number => r != null)
+  const rmsVals = sweep.map((p) => {
+    if (p.rmsPerField?.length) {
+      const valid = p.rmsPerField.filter((r): r is number => r != null)
+      return valid.length > 0 ? Math.sqrt(valid.reduce((s, r) => s + r * r, 0) / valid.length) : null
+    }
+    return p.rmsRadius
+  }).filter((r): r is number => r != null)
   const rmsMax = Math.max(...rmsVals, 1e-6)
   const pad = 2
   const w = width - 2 * pad
   const h = height - 2 * pad
   const pts = sweep
-    .filter((p) => p.rmsRadius != null)
     .map((p) => {
-      const x = pad + (w * (p.z - zMin)) / zRange
-      const y = pad + h - (h * (p.rmsRadius! / rmsMax))
+      const rms = p.rmsPerField?.length
+        ? (() => {
+            const valid = p.rmsPerField!.filter((r): r is number => r != null)
+            return valid.length > 0 ? Math.sqrt(valid.reduce((s, r) => s + r * r, 0) / valid.length) : null
+          })()
+        : p.rmsRadius
+      return { z: p.z, rms }
+    })
+    .filter(({ rms }) => rms != null)
+    .map(({ z, rms }) => {
+      const x = pad + (w * (z - zMin)) / zRange
+      const y = pad + h - (h * (rms! / rmsMax))
       return `${x},${y}`
     })
   const pathD = pts.length >= 2 ? `M ${pts.join(' L ')}` : ''
@@ -348,6 +454,13 @@ function interpolateMetricsAtZ(sweep: MetricsAtZ[] | undefined, z: number): Metr
   }
 }
 
+/** System Average RMS (same metric Best Composite minimizes). */
+function systemAvgRms(metrics: MetricsAtZ | null): number | null {
+  if (!metrics?.rmsPerField?.length) return metrics?.rmsRadius ?? null
+  const valid = metrics.rmsPerField.filter((r): r is number => r != null)
+  return valid.length > 0 ? Math.sqrt(valid.reduce((s, r) => s + r * r, 0) / valid.length) : null
+}
+
 type OpticalViewportProps = {
   className?: string
   systemState: SystemState
@@ -356,6 +469,7 @@ type OpticalViewportProps = {
   onSelectSurface: (id: string | null) => void
   highlightedMetric?: HighlightedMetric
   showPersistentHud?: boolean
+  showBestFocus?: boolean
 }
 
 export function OpticalViewport({
@@ -366,6 +480,7 @@ export function OpticalViewport({
   onSelectSurface,
   highlightedMetric = null,
   showPersistentHud = false,
+  showBestFocus = true,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
@@ -573,6 +688,7 @@ export function OpticalViewport({
   )
 
   const svgRef = useRef<SVGSVGElement>(null)
+  const focusAlignLogRef = useRef<{ last: number }>({ last: 0 })
   const transformInstanceRef = useRef<{
     transformState: { scale: number; positionX: number; positionY: number }
     contentComponent: HTMLDivElement | null
@@ -690,6 +806,31 @@ export function OpticalViewport({
   const hudMetrics = scanHud.isHovering ? scanMetrics : persistentMetrics
   const hudZ = scanHud.isHovering ? scanHud.cursorZ : persistentHudZ
   const isPersistentHud = showPersistentHud && !scanHud.isHovering
+
+  // Debug: HUD vs Diamond alignment — Diamond_RMS < HUD_RMS => math OK, rendering bug; HUD_RMS < Diamond_RMS => backend search bug
+  if (DEBUG_FOCUS_ALIGNMENT && showHud && bestFocusZ != null && traceResult?.metricsSweep?.length) {
+    const now = Date.now()
+    if (now - focusAlignLogRef.current.last >= 300) {
+      focusAlignLogRef.current.last = now
+      const HUD_Z = hudZ
+      const HUD_RMS = systemAvgRms(hudMetrics)
+      const Diamond_Z = bestFocusZ
+      const diamondMetrics = interpolateMetricsAtZ(traceResult.metricsSweep, bestFocusZ)
+      const Diamond_RMS = systemAvgRms(diamondMetrics)
+      console.log('[FocusAlignment]', {
+        HUD_Z: HUD_Z.toFixed(4),
+        HUD_RMS: HUD_RMS != null ? (HUD_RMS * 1000).toFixed(4) + ' µm' : '—',
+        Diamond_Z: Diamond_Z.toFixed(4),
+        Diamond_RMS: Diamond_RMS != null ? (Diamond_RMS * 1000).toFixed(4) + ' µm' : '—',
+        verdict:
+          HUD_RMS != null && Diamond_RMS != null
+            ? Diamond_RMS < HUD_RMS
+              ? 'Math OK → likely RENDERING offset bug'
+              : 'HUD_RMS lower → BACKEND search bug (local min / limited range)'
+            : '—',
+      })
+    }
+  }
 
   return (
     <div className={`relative ${className}`}>
@@ -986,7 +1127,7 @@ export function OpticalViewport({
             />
           )}
 
-          {bestFocusSvgX != null && hasTraced && rays.length > 0 && (
+          {showBestFocus && bestFocusSvgX != null && hasTraced && rays.length > 0 && (
             <g transform={`translate(${bestFocusSvgX}, ${cy})`}>
               <motion.g
                 initial={{ opacity: 0, scale: 0 }}
@@ -1148,15 +1289,29 @@ export function OpticalViewport({
                   </div>
                 )}
                 {traceResult?.metricsSweep?.length && (
-                  <div className="col-span-2 mt-1.5 pt-1.5 border-t border-white/10">
-                    <div className="text-[10px] text-slate-500 mb-0.5">RMS vs Z</div>
-                    <RmsVsZGraph
-                      sweep={traceResult.metricsSweep}
-                      currentZ={hudZ}
-                      width={120}
-                      height={40}
-                    />
-                  </div>
+                  <>
+                    <div className="col-span-2 mt-1.5 pt-1.5 border-t border-white/10">
+                      <div className="text-[10px] text-slate-500 mb-0.5">RMS vs Z</div>
+                      <RmsVsZGraph
+                        sweep={traceResult.metricsSweep}
+                        currentZ={hudZ}
+                        width={120}
+                        height={40}
+                      />
+                    </div>
+                    <div className="col-span-2 mt-1 pt-1 border-t border-white/10">
+                      <div className="text-[10px] text-slate-500 mb-0.5">
+                        Through-Focus (10 mm) — gold line = diamond minimum
+                      </div>
+                      <ThroughFocusSparkline
+                        sweep={traceResult.metricsSweep}
+                        cursorZ={hudZ}
+                        diamondZ={bestFocusZ ?? null}
+                        width={140}
+                        height={44}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
             </motion.div>

@@ -8,6 +8,8 @@ type SystemPropertiesProps = {
   onSystemStateChange: (state: SystemState | ((prev: SystemState) => SystemState)) => void
   selectedSurfaceId: string | null
   onSelectSurface: (id: string | null) => void
+  showBestFocus: boolean
+  onShowBestFocusChange: (value: boolean) => void
 }
 
 const inputClass =
@@ -18,6 +20,8 @@ export function SystemProperties({
   onSystemStateChange,
   selectedSurfaceId,
   onSelectSurface,
+  showBestFocus,
+  onShowBestFocusChange,
 }: SystemPropertiesProps) {
   const update = (partial: Partial<SystemState>) => {
     onSystemStateChange((prev) => ({ ...prev, ...partial }))
@@ -214,6 +218,37 @@ export function SystemProperties({
               ? 'Circle of Least Confusion across the entire field of view.'
               : 'Ignores off-axis aberrations when placing the focus diamond.'}
           </p>
+        </section>
+
+        {/* Visualization Settings */}
+        <section className="glass-card p-4">
+          <h3 className="text-sm font-medium text-slate-300 mb-3">Visualization Settings</h3>
+          <label className="flex items-center justify-between gap-3 cursor-pointer group">
+            <span className="text-sm text-slate-300 group-hover:text-slate-200 transition-colors">
+              Show Best Focus Diamond
+            </span>
+            <span
+              role="switch"
+              aria-checked={showBestFocus}
+              tabIndex={0}
+              onClick={() => onShowBestFocusChange(!showBestFocus)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onShowBestFocusChange(!showBestFocus)
+                }
+              }}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out hover:opacity-90 ${
+                showBestFocus ? 'bg-cyan-electric/40' : 'bg-white/10'
+              }`}
+            >
+              <span
+                className={`pointer-events-none absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-lg transition-all duration-200 ease-in-out ${
+                  showBestFocus ? 'left-5 bg-cyan-electric' : 'left-0.5'
+                }`}
+              />
+            </span>
+          </label>
         </section>
 
         {/* Performance Card */}

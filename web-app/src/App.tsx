@@ -64,6 +64,7 @@ function App() {
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null)
   const [selectedSurfaceId, setSelectedSurfaceId] = useState<string | null>(null)
   const [highlightedMetric, setHighlightedMetric] = useState<HighlightedMetric>(null)
+  const [showBestFocus, setShowBestFocus] = useState(true)
   const [systemState, setSystemState] = useState<SystemState>(() => {
     const loaded = loadLastDesign()
     return loaded ?? { ...DEFAULT_SYSTEM_STATE, ...computePerformance(DEFAULT_SYSTEM_STATE) }
@@ -108,6 +109,7 @@ function App() {
               selectedSurfaceId={selectedSurfaceId}
               onSelectSurface={setSelectedSurfaceId}
               highlightedMetric={null}
+              showBestFocus={showBestFocus}
             />
           )}
           {activeTab === 'system' && (
@@ -135,6 +137,7 @@ function App() {
                   onSelectSurface={setSelectedSurfaceId}
                   highlightedMetric={highlightedMetric}
                   showPersistentHud
+                  showBestFocus={showBestFocus}
                 />
               </div>
             </div>
@@ -156,6 +159,8 @@ function App() {
             onSystemStateChange={onSystemStateChange}
             selectedSurfaceId={selectedSurfaceId}
             onSelectSurface={setSelectedSurfaceId}
+            showBestFocus={showBestFocus}
+            onShowBestFocusChange={setShowBestFocus}
           />
         </aside>
       </div>

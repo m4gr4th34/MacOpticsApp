@@ -235,11 +235,12 @@ def _best_focus_golden_section(
     z_lo,
     z_hi,
     focus_mode="On-Axis",
-    tol=1e-4,
-    max_iter=50,
+    tol=1e-6,
+    max_iter=80,
 ):
     """
-    Golden Section Search to find Z that minimizes global weighted RMS.
+    Find Z that minimizes global weighted RMS using scipy minimize_scalar (golden)
+    or fallback Golden Section Search. Centroid-based RMS per field, not axis-based.
     focus_mode: 'On-Axis' (100% weight on field 0) or 'Balanced' (equal weights).
     """
     n_fields = len(rays_by_field)
@@ -251,6 +252,19 @@ def _best_focus_golden_section(
     def objective(z):
         rms_per_field = _rms_per_field_at_z(rays_by_field, z)
         return _global_weighted_rms(rms_per_field, weights)
+
+    try:
+        from scipy.optimize import minimize_scalar
+        res = minimize_scalar(
+            objective,
+            bracket=(z_lo, z_hi),
+            method="golden",
+            tol=tol,
+            options={"maxiter": max_iter},
+        )
+        return float(res.x), float(res.fun)
+    except ImportError:
+        pass
 
     phi = (1 + np.sqrt(5)) / 2
     z_a, z_b = z_lo, z_hi
@@ -436,14 +450,15 @@ def run_trace(optical_stack: dict) -> dict:
     metrics_sweep = _precompute_metrics_sweep(rays, num_points=100, rays_by_field=rays_by_field)
 
     # Best Focus: Golden Section Search — field-weighted RMS when focus_mode='Balanced'
+    # Search range: entire space from last lens exit to image plane (tol=1e-6).
     last_lens_z_global = tfrms[-2][1][2] if len(tfrms) >= 2 else 0.0
     last_lens_z = last_lens_z_global - z_origin
-    if rays and last_lens_z < focus_z:
+    z_hi = float(focus_z)  # Image plane — full range, no artificial cap
+    if rays and last_lens_z < z_hi:
         try:
-            # Fallback: if no field structure, treat all rays as single field
             rbf = rays_by_field if rays_by_field else [rays]
             best_focus_z, _ = _best_focus_golden_section(
-                rbf, last_lens_z, focus_z, focus_mode=focus_mode
+                rbf, last_lens_z, z_hi, focus_mode=focus_mode
             )
         except Exception:
             best_focus_z = float(focus_z)

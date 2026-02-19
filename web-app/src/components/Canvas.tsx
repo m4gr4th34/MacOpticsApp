@@ -9,6 +9,7 @@ type CanvasProps = {
   onSelectSurface: (id: string | null) => void
   highlightedMetric?: HighlightedMetric
   showPersistentHud?: boolean
+  showBestFocus?: boolean
 }
 
 export function Canvas({
@@ -18,6 +19,7 @@ export function Canvas({
   onSelectSurface,
   highlightedMetric = null,
   showPersistentHud = false,
+  showBestFocus = true,
 }: CanvasProps) {
   return (
     <div className="h-full min-h-[500px] w-full">
@@ -29,6 +31,7 @@ export function Canvas({
         onSelectSurface={onSelectSurface}
         highlightedMetric={highlightedMetric}
         showPersistentHud={showPersistentHud}
+        showBestFocus={showBestFocus}
       />
     </div>
   )
