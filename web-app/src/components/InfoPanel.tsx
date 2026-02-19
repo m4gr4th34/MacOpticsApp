@@ -7,6 +7,7 @@ import {
   ScanLine,
   ChevronDown,
   Dices,
+  Palette,
 } from 'lucide-react'
 import { isMac } from '../config'
 import type { HighlightedMetric } from '../types/ui'
@@ -17,31 +18,12 @@ const kbdClass =
   'px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-200 font-mono text-[10px] shadow-[0_1px_0_0_rgba(255,255,255,0.1),inset_0_-1px_0_0_rgba(0,0,0,0.3)]'
 
 const SECTIONS = [
-  {
-    id: 'nav',
-    title: 'Navigation Shortcuts',
-    icon: MousePointer2,
-  },
-  {
-    id: 'laser',
-    title: 'Laser & Gaussian Optics',
-    icon: ScanLine,
-  },
-  {
-    id: 'ultrafast',
-    title: 'Ultrafast / Femtosecond Design',
-    icon: Zap,
-  },
-  {
-    id: 'montecarlo',
-    title: 'Manufacturing Reliability (Monte Carlo)',
-    icon: Dices,
-  },
-  {
-    id: 'export',
-    title: 'Manufacturing Export',
-    icon: FileText,
-  },
+  { id: 'nav', title: 'Navigation Shortcuts', icon: MousePointer2 },
+  { id: 'laser', title: 'Laser & Gaussian Optics', icon: ScanLine },
+  { id: 'ultrafast', title: 'Ultrafast / Femtosecond Design', icon: Zap },
+  { id: 'chromatic', title: 'Chromatic Analysis & Optimization', icon: Palette },
+  { id: 'montecarlo', title: 'Manufacturing Reliability (Monte Carlo)', icon: Dices },
+  { id: 'export', title: 'Manufacturing Export', icon: FileText },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
@@ -146,33 +128,12 @@ const GLOSSARY_ITEMS: {
   formula: string
   metricId: Exclude<HighlightedMetric, null>
 }[] = [
-  {
-    title: 'Z-Position',
-    metricId: 'z',
-    explanation: 'Axial distance from the global coordinate origin along the optical axis.',
-    formula: 'z ∈ ℝ  (mm)',
-  },
-  {
-    title: 'RMS Radius',
-    metricId: 'rms',
-    explanation: "Root mean square of ray distances from the centroid—effective 'blur' size.",
-    formula: 'R_rms = √((1/n) Σ (y_i − ȳ)²)',
-  },
-  {
-    title: 'Beam Width',
-    metricId: 'beamWidth',
-    explanation: 'Full aperture: total vertical spread of the ray bundle at the current Z-plane.',
-    formula: 'W = max(yᵢ) − min(yᵢ)',
-  },
-  {
-    title: 'Chief Ray Angle (CRA)',
-    metricId: 'cra',
-    explanation: 'Angle of the ray through the aperture stop center relative to the optical axis.',
-    formula: 'CRA = arctan(dy/dz)  [°]',
-  },
+  { title: 'Z-Position', metricId: 'z', explanation: 'Axial distance from the global coordinate origin along the optical axis.', formula: 'z ∈ ℝ  (mm)' },
+  { title: 'RMS Radius', metricId: 'rms', explanation: "Root mean square of ray distances from the centroid—effective 'blur' size.", formula: 'R_rms = √((1/n) Σ (y_i − ȳ)²)' },
+  { title: 'Beam Width', metricId: 'beamWidth', explanation: 'Full aperture: total vertical spread of the ray bundle at the current Z-plane.', formula: 'W = max(yᵢ) − min(yᵢ)' },
+  { title: 'Chief Ray Angle (CRA)', metricId: 'cra', explanation: 'Angle of the ray through the aperture stop center relative to the optical axis.', formula: 'CRA = arctan(dy/dz)  [°]' },
 ]
 
-/** Low-dispersion preset: Fused Silica lens for ultrafast design */
 function createLowDispersionPreset(): SystemState {
   const base: SystemState = {
     entrancePupilDiameter: 10,
@@ -184,26 +145,8 @@ function createLowDispersionPreset(): SystemState {
     pulseWidthFs: 100,
     hasTraced: false,
     surfaces: [
-      {
-        id: crypto.randomUUID(),
-        type: 'Glass',
-        radius: 80,
-        thickness: 6,
-        refractiveIndex: 1.458,
-        diameter: 25,
-        material: 'Fused Silica',
-        description: 'Low-dispersion front',
-      },
-      {
-        id: crypto.randomUUID(),
-        type: 'Air',
-        radius: -80,
-        thickness: 94,
-        refractiveIndex: 1,
-        diameter: 25,
-        material: 'Air',
-        description: 'Back surface',
-      },
+      { id: crypto.randomUUID(), type: 'Glass', radius: 80, thickness: 6, refractiveIndex: 1.458, diameter: 25, material: 'Fused Silica', description: 'Low-dispersion front' },
+      { id: crypto.randomUUID(), type: 'Air', radius: -80, thickness: 94, refractiveIndex: 1, diameter: 25, material: 'Air', description: 'Back surface' },
     ],
     rmsSpotRadius: 0,
     totalLength: 100,
@@ -230,9 +173,7 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateC
         <div className="bg-slate-900/40 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden shadow-xl">
           <div className="px-4 py-4 border-b border-white/10">
             <h2 className="text-lg font-bold text-cyan-electric">User Guide</h2>
-            <p className="text-slate-400 text-xs mt-0.5">
-              Documentation for optical design workflows
-            </p>
+            <p className="text-slate-400 text-xs mt-0.5">Documentation for optical design workflows</p>
           </div>
           <div className="p-2">
             {SECTIONS.map(({ id, title, icon }) => (
@@ -247,150 +188,99 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateC
                 {id === 'nav' && (
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider mb-2">
-                        Keyboard shortcuts
-                      </h4>
+                      <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider mb-2">Keyboard shortcuts</h4>
                       <ul className="space-y-2 text-slate-400">
-                        <li className="flex items-center gap-2">
-                          <kbd className={kbdClass}>Space</kbd>
-                          <span>+</span>
-                          <kbd className={kbdClass}>Drag</kbd>
-                          <span className="text-slate-500">— Pan viewport</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <kbd className={kbdClass}>Scroll</kbd>
-                          <span className="text-slate-500">— Zoom in/out</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <kbd className={kbdClass}>Double Click</kbd>
-                          <span className="text-slate-500">— Reset view</span>
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <kbd className={kbdClass}>{isMac ? '⌥ Option' : 'Alt'}</kbd>
-                          <span className="text-slate-500">— Override Snap-to-Focus</span>
-                        </li>
+                        <li className="flex items-center gap-2"><kbd className={kbdClass}>Space</kbd>+<kbd className={kbdClass}>Drag</kbd><span className="text-slate-500">— Pan viewport</span></li>
+                        <li className="flex items-center gap-2"><kbd className={kbdClass}>Scroll</kbd><span className="text-slate-500">— Zoom in/out</span></li>
+                        <li className="flex items-center gap-2"><kbd className={kbdClass}>Double Click</kbd><span className="text-slate-500">— Reset view</span></li>
+                        <li className="flex items-center gap-2"><kbd className={kbdClass}>{isMac ? '⌥ Option' : 'Alt'}</kbd><span className="text-slate-500">— Override Snap-to-Focus</span></li>
                       </ul>
                     </div>
                     <div>
-                      <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider mb-2">
-                        Scan line
-                      </h4>
-                      <p>
-                        Drag the scan line in the viewport to sweep Z and inspect RMS, beam width,
-                        and CRA. Use Snap to Focus / Snap to Surface to jump to key positions.
-                      </p>
+                      <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider mb-2">Scan line</h4>
+                      <p>Drag the scan line in the viewport to sweep Z and inspect RMS, beam width, and CRA. Use Snap to Focus / Snap to Surface to jump to key positions.</p>
                     </div>
                     <div>
-                      <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider mb-2">
-                        HUD &amp; metrics
-                      </h4>
-                      <p>
-                        Hover glossary cards in this guide to highlight the corresponding metric in
-                        the viewport HUD.
-                      </p>
+                      <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider mb-2">HUD &amp; metrics</h4>
+                      <p>Hover glossary cards in this guide to highlight the corresponding metric in the viewport HUD.</p>
                     </div>
                   </div>
                 )}
                 {id === 'laser' && (
                   <div className="space-y-4">
-                    <p>
-                      Laser systems typically use Gaussian or near-Gaussian beam profiles. The
-                      scan metrics help you locate the beam waist, minimize spot size, and control
-                      divergence.
-                    </p>
-                    <p>
-                      The HUD now displays Beam Waist (w₀) and Rayleigh Range (z<sub>R</sub>). For
-                      laser design, ensure your M² factor is set in System Properties to simulate
-                      real-world beam quality.
-                    </p>
+                    <p>Laser systems typically use Gaussian or near-Gaussian beam profiles. The scan metrics help you locate the beam waist, minimize spot size, and control divergence.</p>
+                    <p>The HUD now displays Beam Waist (w₀) and Rayleigh Range (z<sub>R</sub>). For laser design, ensure your M² factor is set in System Properties to simulate real-world beam quality.</p>
                     <div className="space-y-2">
                       {GLOSSARY_ITEMS.map((item) => (
-                        <GlossaryCard
-                          key={item.title}
-                          {...item}
-                          isHighlighted={highlightedMetric === item.metricId}
-                          onMouseEnter={() => onHighlightMetric(item.metricId)}
-                          onMouseLeave={() => onHighlightMetric(null)}
-                        />
+                        <GlossaryCard key={item.title} {...item} isHighlighted={highlightedMetric === item.metricId} onMouseEnter={() => onHighlightMetric(item.metricId)} onMouseLeave={() => onHighlightMetric(null)} />
                       ))}
                     </div>
-                    <p>
-                      <strong className="text-slate-300">Tip:</strong> Minimize RMS at the image
-                      plane to reduce blur; use the scan line to find where beam width is smallest.
-                    </p>
+                    <p><strong className="text-slate-300">Tip:</strong> Minimize RMS at the image plane to reduce blur; use the scan line to find where beam width is smallest.</p>
                     <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
                       <p className="text-xs font-medium text-cyan-electric/90 mb-0.5">Pro-Tip</p>
-                      <p className="text-slate-400 text-sm leading-relaxed">
-                        Note: The Gold Diamond indicates the point of minimum beam waist, which may
-                        shift based on lens dispersion.
-                      </p>
+                      <p className="text-slate-400 text-sm leading-relaxed">Note: The Gold Diamond indicates the point of minimum beam waist, which may shift based on lens dispersion.</p>
                     </div>
                   </div>
                 )}
                 {id === 'ultrafast' && (
                   <div className="space-y-4">
-                    <p>
-                      Ultrafast and femtosecond optics introduce dispersion, group delay, and
-                      pulse broadening. This app models chromatic dispersion and thermal lensing
-                      to support pulsed-laser system design.
-                    </p>
-                    <p>
-                      Designing for femtosecond pulses? Monitor the <strong className="text-slate-300">GDD</strong> (Group
-                      Delay Dispersion) value in the HUD. Most common glasses add positive GDD, which
-                      stretches your pulse. Aim for zero net GDD for transform-limited pulses.
-                    </p>
+                    <p>Ultrafast and femtosecond optics introduce dispersion, group delay, and pulse broadening. This app models chromatic dispersion and thermal lensing to support pulsed-laser system design.</p>
+                    <p>Designing for femtosecond pulses? Monitor the <strong className="text-slate-300">GDD</strong> (Group Delay Dispersion) value in the HUD. Most common glasses add positive GDD, which stretches your pulse. Aim for zero net GDD for transform-limited pulses.</p>
                     <ul className="space-y-1.5">
-                      <li>
-                        • <strong className="text-slate-300">Dispersion</strong> — wavelength-dependent
-                        refractive index (Abbe V) affects pulse temporal shape
-                      </li>
-                      <li>
-                        • <strong className="text-slate-300">Thermal lensing</strong> — absorption + dn/dT
-                        cause focal shift at high power (use Heat Map in System Properties)
-                      </li>
-                      <li>
-                        • <strong className="text-slate-300">Ultrafast HUD</strong> — view GDD and
-                        pulse metrics when the scan line is active
-                      </li>
+                      <li>• <strong className="text-slate-300">Dispersion</strong> — wavelength-dependent refractive index (Abbe V) affects pulse temporal shape</li>
+                      <li>• <strong className="text-slate-300">Thermal lensing</strong> — absorption + dn/dT cause focal shift at high power (use Heat Map in System Properties)</li>
+                      <li>• <strong className="text-slate-300">Ultrafast HUD</strong> — view GDD and pulse metrics when the scan line is active</li>
                     </ul>
                     {onSystemStateChange && (
-                      <button
-                        type="button"
-                        onClick={() => onSystemStateChange(createLowDispersionPreset())}
-                        className="mt-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors"
-                      >
+                      <button type="button" onClick={() => onSystemStateChange(createLowDispersionPreset())} className="mt-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors">
                         Load Low-Dispersion Presets
                       </button>
                     )}
                   </div>
                 )}
-                {id === 'montecarlo' && (
+                {id === 'chromatic' && (
                   <div className="space-y-4">
+                    <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider">
+                      Chromatic Control &amp; Color Correction
+                    </h4>
+                    <p className="text-slate-500 text-xs italic">Managing focal shift across the visible and IR spectrum.</p>
                     <p>
-                      Monte Carlo sensitivity analysis simulates manufacturing variability by
-                      jittering surface parameters (radius, thickness) within their tolerances over
-                      many iterations. Each iteration produces a slightly different optical system;
-                      the combined spot positions at the image plane form a point cloud that shows
-                      how robust your design is to fabrication errors.
+                      <strong className="text-slate-300">Longitudinal Chromatic Aberration (LCA):</strong> Different colors of light refract at different angles because the refractive index n is a function of wavelength λ. The LCA graph plots the focus shift (Δz) relative to your design wavelength.
                     </p>
-                    <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
-                      <p className="text-xs font-medium text-cyan-electric/90 mb-1">RMS Spot Radius</p>
-                      <p className="text-slate-400 text-sm leading-relaxed">
-                        The root-mean-square distance of all rays from the centroid at the image
-                        plane. Lower values indicate tighter manufacturing tolerance and a more
-                        robust design.
+                    <p>
+                      <strong className="text-slate-300">Reading the Graph:</strong> A steep vertical line indicates high dispersion (common in single-lens systems). A &quot;folded&quot; or flatter curve indicates an Achromatic design, where multiple wavelengths share a common focus.
+                    </p>
+                    <p>
+                      <strong className="text-slate-300">One-Click Optimization:</strong> The Optimize Colors tool uses a heuristic search through the Schott and Ohara glass catalogs. It identifies the ideal &quot;Flint&quot; glass to pair with your current &quot;Crown&quot; glass to neutralize dispersion without changing your effective focal length.
+                    </p>
+                    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                      <p className="text-xs font-medium text-slate-400 mb-1.5">Legend</p>
+                      <ul className="space-y-1 text-slate-400 text-xs">
+                        <li><kbd className={kbdClass}>Y-Axis</kbd> = Wavelength (λ)</li>
+                        <li><kbd className={kbdClass}>X-Axis</kbd> = Focus Shift (Δz)</li>
+                      </ul>
+                      <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+                        The zero-point on the X-axis represents the focus position of your primary system wavelength.
                       </p>
                     </div>
-                    <p>
-                      Set R±, T±, and Tilt± tolerances in the System Editor, then run the analysis
-                      to see the point cloud and RMS spread at focus.
-                    </p>
+                    <div className="rounded-lg border border-slate-600 bg-slate-800/50 px-3 py-2.5">
+                      <p className="text-xs font-medium text-slate-400 mb-0.5">Tech Note</p>
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                        Note: Optimization requires a multi-surface system. For best results, use a doublet configuration (two lenses with different glass types).
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {id === 'montecarlo' && (
+                  <div className="space-y-4">
+                    <p>Monte Carlo sensitivity analysis simulates manufacturing variability by jittering surface parameters (radius, thickness) within their tolerances over many iterations. Each iteration produces a slightly different optical system; the combined spot positions at the image plane form a point cloud that shows how robust your design is to fabrication errors.</p>
+                    <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
+                      <p className="text-xs font-medium text-cyan-electric/90 mb-1">RMS Spot Radius</p>
+                      <p className="text-slate-400 text-sm leading-relaxed">The root-mean-square distance of all rays from the centroid at the image plane. Lower values indicate tighter manufacturing tolerance and a more robust design.</p>
+                    </div>
+                    <p>Set R±, T±, and Tilt± tolerances in the System Editor, then run the analysis to see the point cloud and RMS spread at focus.</p>
                     {onRunSampleAnalysis && (
-                      <button
-                        type="button"
-                        onClick={onRunSampleAnalysis}
-                        className="mt-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors"
-                      >
+                      <button type="button" onClick={onRunSampleAnalysis} className="mt-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors">
                         Run Sample Analysis
                       </button>
                     )}
@@ -398,23 +288,11 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateC
                 )}
                 {id === 'export' && (
                   <div className="space-y-4">
-                    <p>
-                      Export your optical system as an ISO 10110–style technical drawing for
-                      manufacturing and documentation.
-                    </p>
+                    <p>Export your optical system as an ISO 10110–style technical drawing for manufacturing and documentation.</p>
                     <ul className="space-y-1.5">
-                      <li>
-                        • <strong className="text-slate-300">Export tab</strong> — cross-section,
-                        dimensions (CT), data table (Surf, S/D, Material, CT), and title block
-                      </li>
-                      <li>
-                        • <strong className="text-slate-300">S/D (Scratch/Dig)</strong> — surface
-                        quality per ISO 10110; editable in System Editor
-                      </li>
-                      <li>
-                        • <strong className="text-slate-300">SVG / PDF</strong> — high-resolution
-                        export via Export Drawing and browser print
-                      </li>
+                      <li>• <strong className="text-slate-300">Export tab</strong> — cross-section, dimensions (CT), data table (Surf, S/D, Material, CT), and title block</li>
+                      <li>• <strong className="text-slate-300">S/D (Scratch/Dig)</strong> — surface quality per ISO 10110; editable in System Editor</li>
+                      <li>• <strong className="text-slate-300">SVG / PDF</strong> — high-resolution export via Export Drawing and browser print</li>
                     </ul>
                   </div>
                 )}
