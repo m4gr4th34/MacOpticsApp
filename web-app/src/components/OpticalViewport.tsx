@@ -490,6 +490,14 @@ export function OpticalViewport({
   const [isPanning, setIsPanning] = useState(false)
   const [isSpaceHeld, setIsSpaceHeld] = useState(false)
   const [showCausticEnvelope, setShowCausticEnvelope] = useState(false)
+  const [fieldFilter, setFieldFilter] = useState<number | null>(null)
+
+  const numFields = (systemState.fieldAngles || [0]).length
+  useEffect(() => {
+    if (fieldFilter != null && fieldFilter >= numFields) {
+      setFieldFilter(null)
+    }
+  }, [numFields, fieldFilter])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -952,6 +960,38 @@ export function OpticalViewport({
             Caustic Envelope
           </label>
         )}
+        {hasTraced && (
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-sm whitespace-nowrap">Field</span>
+            <div className="flex items-center gap-1.5">
+              {(systemState.fieldAngles || [0]).slice(0, config.rayColors.length).map((_, fIdx) => {
+                const color = config.rayColors[Math.min(fIdx, config.rayColors.length - 1)]
+                const isActive = fieldFilter === fIdx
+                return (
+                  <button
+                    key={fIdx}
+                    type="button"
+                    onClick={() => setFieldFilter(fieldFilter === fIdx ? null : fIdx)}
+                    title={
+                      fieldFilter === fIdx
+                        ? 'Show all fields'
+                        : `Show only field ${fIdx}${(systemState.fieldAngles || [])[fIdx] != null ? ` (${(systemState.fieldAngles || [])[fIdx]}°)` : ''}`
+                    }
+                    className={`w-3 h-3 rounded-full transition-all ring-offset-2 ring-offset-slate-900 ${
+                      isActive ? 'ring-2 ring-white scale-125' : 'ring-0 hover:scale-110 opacity-80 hover:opacity-100'
+                    }`}
+                    style={{
+                      backgroundColor: color,
+                      boxShadow: isActive ? `0 0 6px ${color}` : undefined,
+                    }}
+                    aria-label={`Filter to field ${fIdx}`}
+                    aria-pressed={isActive}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {traceError && (
@@ -1190,9 +1230,12 @@ export function OpticalViewport({
             })}
           </g>
 
-          {raysByField.map((group, groupIdx) => (
+          {raysByField
+            .map((group, origIdx) => ({ group, origIdx }))
+            .filter(({ origIdx }) => fieldFilter === null || origIdx === fieldFilter)
+            .map(({ group, origIdx }) => (
             <g
-              key={groupIdx}
+              key={origIdx}
               stroke={group.color}
               strokeWidth="1.2"
               strokeOpacity="0.9"
@@ -1204,11 +1247,11 @@ export function OpticalViewport({
                   .map((p, j) => `${j === 0 ? 'M' : 'L'} ${toSvg(p.x, p.y)}`)
                   .join(' ')
                 const globalIdx = raysByField
-                  .slice(0, groupIdx)
+                  .slice(0, origIdx)
                   .reduce((n, g) => n + g.rays.length, 0) + rayIdx
                 return (
                   <motion.path
-                    key={`field-${groupIdx}-ray-${rayIdx}`}
+                    key={`field-${origIdx}-ray-${rayIdx}`}
                     d={d}
                     fill="none"
                     initial={{ pathLength: 0, opacity: 0 }}
