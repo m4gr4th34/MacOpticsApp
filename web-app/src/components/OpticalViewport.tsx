@@ -758,49 +758,43 @@ export function OpticalViewport({
         cursorSvgY = (e.clientY - rect.top - offsetY) / scaleFit
       }
 
+      // Default: HUD line follows mouse exactly (Z = mouseZ)
       let scanSvgX = cursorSvgX
-      let bestDist = SCAN_SNAP_PX
       let snappedSurfaceIndex: number | null = null
+      let snapType: 'None' | 'Surface' | 'Focus' = 'None'
 
-      // Alt key: temporarily disable all snapping for fine-grained manual inspection
+      // Override: Alt key held → bypass all snapping, Z = mouseZ
       if (!isAltHeld) {
-      // Priority 1: Surface snap (when snapToSurface, magnetically snap within 10px)
-      if (snapToSurface) {
-        for (let i = 0; i < zPositions.length; i++) {
-          const z = zPositions[i]
-          const targetX = z * scale + xOffset
-          const d = Math.abs(cursorSvgX - targetX)
-          if (d < bestDist) {
-            bestDist = d
-            scanSvgX = targetX
-            snappedSurfaceIndex = i
+        // Surface Snap: IF snapToSurface ON and mouse within 10px of a surface → Z = surfaceZ
+        if (snapToSurface) {
+          let bestSurfaceDist = SCAN_SNAP_PX
+          for (let i = 0; i < zPositions.length; i++) {
+            const targetX = zPositions[i] * scale + xOffset
+            const d = Math.abs(cursorSvgX - targetX)
+            if (d < bestSurfaceDist) {
+              bestSurfaceDist = d
+              scanSvgX = targetX
+              snappedSurfaceIndex = i
+              snapType = 'Surface'
+            }
           }
         }
-      }
-      const snappedToSurface = snappedSurfaceIndex != null
 
-      // Priority 2 & 3: Best Focus and paraxial focus (only if not snapped to surface)
-      if (!snappedToSurface) {
-        if (traceResult?.focusZ != null) {
-          const targetX = traceResult.focusZ * scale + xOffset
-          const d = Math.abs(cursorSvgX - targetX)
-          if (d < bestDist) {
-            bestDist = d
-            scanSvgX = targetX
-          }
-        }
-        if (snapToFocus && traceResult?.bestFocusZ != null) {
-          const targetX = traceResult.bestFocusZ * scale + xOffset
-          const d = Math.abs(cursorSvgX - targetX)
-          if (d < bestDist) {
-            bestDist = d
-            scanSvgX = targetX
+        // Focus Snap: IF snapToFocus ON, NOT surface-snapping, and mouse within 10px of diamond → Z = focusZ
+        if (snapType !== 'Surface' && snapToFocus && traceResult?.bestFocusZ != null) {
+          const diamondX = traceResult.bestFocusZ * scale + xOffset
+          const d = Math.abs(cursorSvgX - diamondX)
+          if (d < SCAN_SNAP_PX) {
+            scanSvgX = diamondX
+            snapType = 'Focus'
           }
         }
       }
-      }
-      // Optical Z (mm) = (SVG X - xOffset) / scale — NOT screen pixels; SVG X is in viewBox units
+
       const zCursorPos = (scanSvgX - xOffset) / scale
+      if (import.meta.env.DEV) {
+        console.log('[HUD Snap]', snapType, '| Z=', zCursorPos.toFixed(3), 'mm')
+      }
       if (DEBUG_HUD_COORDS) {
         console.log('[HUD] coord chain: clientX=', e.clientX, '| cursorSvgX (viewBox)=', cursorSvgX.toFixed(1), '| scanSvgX=', scanSvgX.toFixed(1), '| scale=', scale.toFixed(2), 'xOffset=', xOffset.toFixed(1), '→ zCursorPos (optical mm)=', zCursorPos.toFixed(3))
       }
@@ -815,7 +809,17 @@ export function OpticalViewport({
         snappedSurfaceIndex,
       })
     },
-    [scale, xOffset, viewWidth, viewHeight, zPositions, traceResult?.focusZ, traceResult?.bestFocusZ, snapToFocus, snapToSurface, isAltHeld]
+    [
+      scale,
+      xOffset,
+      viewWidth,
+      viewHeight,
+      zPositions, // optical_stack surface Z positions (derived from surfaces)
+      traceResult?.bestFocusZ,
+      snapToFocus,
+      snapToSurface,
+      isAltHeld,
+    ]
   )
 
   const handleSvgMouseLeave = useCallback(() => {
