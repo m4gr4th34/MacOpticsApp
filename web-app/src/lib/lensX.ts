@@ -14,7 +14,18 @@ export { getISOString } from './iso10110'
 /** Valid LENS-X version strings */
 const VALID_LENS_X_VERSIONS = ['1.0']
 
-/** LENS-X surface with physics and manufacturing data */
+/** Per-surface Monte Carlo tolerances — always emitted for engine compatibility */
+export interface LensXTolerances {
+  radius_tol: number
+  thickness_tol: number
+  decenter_x: number
+  decenter_y: number
+  tilt_x: number
+  tilt_y: number
+  index_tol: number
+}
+
+/** LENS-X surface with physics, manufacturing, and tolerances */
 export interface LensXSurface {
   /** Radius (mm) or "infinity" for plano */
   radius: number | 'infinity'
@@ -34,6 +45,15 @@ export interface LensXSurface {
     thickness_tolerance?: number
     tilt_tolerance?: number
   }
+  /** Monte Carlo tolerances — always present, explicit 0 for omitted values */
+  tolerances: LensXTolerances
+}
+
+/** Global Monte Carlo settings — always emitted for engine compatibility */
+export interface LensXSystemSettings {
+  mc_iterations: number
+  mc_seed: number
+  target_yield: number
 }
 
 /** LENS-X document schema */
@@ -44,10 +64,12 @@ export interface LensXDocument {
     date?: string
     drawn_by?: string
   }
+  /** Global Monte Carlo settings — always present */
+  system_settings: LensXSystemSettings
   optics: {
     surfaces: LensXSurface[]
-    entrance_pupil_diameter?: number
-    reference_wavelength_nm?: number
+    entrance_pupil_diameter: number
+    reference_wavelength_nm: number
   }
   geometry?: {
     svg_path: string
@@ -56,7 +78,8 @@ export interface LensXDocument {
 
 /**
  * Generate LENS-X JSON from system state.
- * Ensures radius, thickness, aperture for every surface.
+ * Full state serialization: always emits tolerances and system_settings with explicit values
+ * (0 for omitted) so the Monte Carlo engine has a complete structure on reload.
  */
 export function toLensX(
   surfaces: Surface[],
@@ -66,6 +89,9 @@ export function toLensX(
     drawnBy?: string
     entrancePupilDiameter?: number
     referenceWavelengthNm?: number
+    mcIterations?: number
+    mcSeed?: number
+    targetYield?: number
     width?: number
     height?: number
   } = {}
@@ -75,7 +101,10 @@ export function toLensX(
     date = new Date().toISOString().slice(0, 10),
     drawnBy = 'MacOptics',
     entrancePupilDiameter = 10,
-    referenceWavelengthNm,
+    referenceWavelengthNm = 587.6,
+    mcIterations = 1000,
+    mcSeed = 42,
+    targetYield = 0.95,
     width = 800,
     height = 570,
   } = options
@@ -87,6 +116,7 @@ export function toLensX(
     if (s.coating) physics.coating = s.coating
     const r = s.radius ?? 0
     const isFlat = r === 0 || (typeof r === 'number' && Math.abs(r) < 0.01)
+    const tilt = s.tiltTolerance ?? 0
     return {
       radius: isFlat ? 'infinity' : r,
       thickness: s.thickness ?? 0,
@@ -97,9 +127,18 @@ export function toLensX(
       physics: Object.keys(physics).length > 0 ? physics : undefined,
       manufacturing: {
         surface_quality: s.surfaceQuality ?? '3/2',
-        radius_tolerance: s.radiusTolerance,
-        thickness_tolerance: s.thicknessTolerance,
-        tilt_tolerance: s.tiltTolerance,
+        radius_tolerance: s.radiusTolerance ?? 0,
+        thickness_tolerance: s.thicknessTolerance ?? 0,
+        tilt_tolerance: tilt,
+      },
+      tolerances: {
+        radius_tol: s.radiusTolerance ?? 0,
+        thickness_tol: s.thicknessTolerance ?? 0,
+        decenter_x: s.decenterX ?? 0,
+        decenter_y: s.decenterY ?? 0,
+        tilt_x: tilt,
+        tilt_y: tilt,
+        index_tol: 0,
       },
     }
   })
@@ -128,10 +167,15 @@ export function toLensX(
   return {
     lens_x_version: '1.0',
     metadata: { project_name: projectName, date, drawn_by: drawnBy },
+    system_settings: {
+      mc_iterations: mcIterations,
+      mc_seed: mcSeed,
+      target_yield: targetYield,
+    },
     optics: {
       surfaces: lensSurfaces,
       entrance_pupil_diameter: entrancePupilDiameter,
-      ...(referenceWavelengthNm != null && { reference_wavelength_nm: referenceWavelengthNm }),
+      reference_wavelength_nm: refWl,
     },
     geometry: { svg_path: svgPreview },
   }
@@ -145,6 +189,11 @@ export interface FromLensXResult {
   entrancePupilDiameter: number
   wavelengths: number[]
   projectName?: string
+  mc_iterations?: number
+  mc_seed?: number
+  target_yield?: number
+  /** True if all surfaces had a tolerances block; false if any were missing (defaulted to 0) */
+  hasTolerancesData: boolean
 }
 
 /**
@@ -171,6 +220,7 @@ export function fromLensX(doc: unknown): FromLensXResult {
   if (!Array.isArray(surfacesRaw)) {
     throw new Error('Invalid LENS-X: optics.surfaces must be an array')
   }
+  let hasTolerancesData = true
   const surfaces: Surface[] = surfacesRaw.map((raw, idx) => {
     if (!raw || typeof raw !== 'object') {
       throw new Error(`Invalid LENS-X: surface ${idx + 1} is not an object`)
@@ -219,6 +269,22 @@ export function fromLensX(doc: unknown): FromLensXResult {
     if (typeof mfg.radius_tolerance === 'number') surf.radiusTolerance = mfg.radius_tolerance
     if (typeof mfg.thickness_tolerance === 'number') surf.thicknessTolerance = mfg.thickness_tolerance
     if (typeof mfg.tilt_tolerance === 'number') surf.tiltTolerance = mfg.tilt_tolerance
+    const tol = (s.tolerances || {}) as Record<string, unknown>
+    const tolPresent = tol && typeof tol === 'object' && Object.keys(tol).length > 0
+    if (!tolPresent) {
+      hasTolerancesData = false
+      surf.radiusTolerance = surf.radiusTolerance ?? 0
+      surf.thicknessTolerance = surf.thicknessTolerance ?? 0
+      surf.tiltTolerance = surf.tiltTolerance ?? 0
+      surf.decenterX = 0
+      surf.decenterY = 0
+    } else {
+      surf.radiusTolerance = typeof tol.radius_tol === 'number' ? tol.radius_tol : (surf.radiusTolerance ?? 0)
+      surf.thicknessTolerance = typeof tol.thickness_tol === 'number' ? tol.thickness_tol : (surf.thicknessTolerance ?? 0)
+      surf.tiltTolerance = typeof tol.tilt_x === 'number' ? tol.tilt_x : (typeof tol.tilt_y === 'number' ? tol.tilt_y : (surf.tiltTolerance ?? 0))
+      surf.decenterX = typeof tol.decenter_x === 'number' ? tol.decenter_x : 0
+      surf.decenterY = typeof tol.decenter_y === 'number' ? tol.decenter_y : 0
+    }
     return surf
   })
   const entrancePupilDiameter =
@@ -232,11 +298,16 @@ export function fromLensX(doc: unknown): FromLensXResult {
   const metadata = (d.metadata || {}) as Record<string, unknown>
   const projectName =
     typeof metadata.project_name === 'string' ? metadata.project_name : undefined
+  const sysSettings = (d.system_settings || {}) as Record<string, unknown>
   return {
     surfaces,
     entrancePupilDiameter,
     wavelengths: [refWl],
     projectName,
+    mc_iterations: typeof sysSettings.mc_iterations === 'number' ? sysSettings.mc_iterations : undefined,
+    mc_seed: typeof sysSettings.mc_seed === 'number' ? sysSettings.mc_seed : undefined,
+    target_yield: typeof sysSettings.target_yield === 'number' ? sysSettings.target_yield : undefined,
+    hasTolerancesData,
   }
 }
 

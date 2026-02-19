@@ -13,6 +13,10 @@ export type Surface = {
   thicknessTolerance?: number
   /** Tolerance ± (degrees) for Tilt — Monte Carlo jitter */
   tiltTolerance?: number
+  /** Decenter in x (mm) — Monte Carlo */
+  decenterX?: number
+  /** Decenter in y (mm) — Monte Carlo */
+  decenterY?: number
   /** Absorption coefficient (1/cm) for thermal lensing — Glass surfaces only */
   absorptionCoefficient?: number
   /** ISO 10110 surface quality (scratch/dig), e.g. "3/2" */
@@ -85,6 +89,12 @@ export type SystemState = {
   laserPowerW?: number
   /** Project name for ISO 10110 export */
   projectName?: string
+  /** Monte Carlo iterations (saved to .lensx) */
+  mc_iterations?: number
+  /** Monte Carlo random seed (saved to .lensx) */
+  mc_seed?: number
+  /** Monte Carlo target yield 0–1 (saved to .lensx) */
+  target_yield?: number
 }
 
 /** Compute performance metrics from system state (prefer trace result when available) */

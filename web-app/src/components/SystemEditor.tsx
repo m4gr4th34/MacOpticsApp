@@ -612,7 +612,7 @@ export function SystemEditor({
   const handleLoadConfirm = () => {
     if (!loadConfirmPending) return
     try {
-      const { surfaces, entrancePupilDiameter, wavelengths, projectName } =
+      const { surfaces, entrancePupilDiameter, wavelengths, projectName, mc_iterations, mc_seed, target_yield, hasTolerancesData } =
         parseLensXFile(loadConfirmPending.content)
       onSystemStateChange((prev) => ({
         ...prev,
@@ -620,11 +620,14 @@ export function SystemEditor({
         entrancePupilDiameter,
         wavelengths,
         projectName,
+        ...(mc_iterations != null && { mc_iterations }),
+        ...(mc_seed != null && { mc_seed }),
+        ...(target_yield != null && { target_yield }),
         traceResult: null,
         traceError: null,
         pendingTrace: true,
       }))
-      setToastMessage('Project loaded successfully.')
+      setToastMessage(hasTolerancesData ? 'Project loaded successfully.' : 'Project loaded without tolerance data.')
       setLoadConfirmPending(null)
     } catch (err) {
       setToastMessage(err instanceof Error ? err.message : 'Failed to load project')
@@ -643,6 +646,9 @@ export function SystemEditor({
       drawnBy: 'MacOptics',
       entrancePupilDiameter: systemState.entrancePupilDiameter,
       referenceWavelengthNm: systemState.wavelengths[0] ?? 587.6,
+      mcIterations: systemState.mc_iterations ?? 1000,
+      mcSeed: systemState.mc_seed ?? 42,
+      targetYield: systemState.target_yield ?? 0.95,
     })
     const blob = new Blob([JSON.stringify(doc, null, 2)], {
       type: 'application/json',
@@ -870,6 +876,8 @@ export function SystemEditor({
               <th className="py-2 pr-3" title="Radius ± (mm)">R ±</th>
               <th className="py-2 pr-3" title="Thickness ± (mm)">T ±</th>
               <th className="py-2 pr-3" title="Tilt ± (deg)">Tilt ±</th>
+              <th className="py-2 pr-3" title="Decenter X (mm)">Dec X</th>
+              <th className="py-2 pr-3" title="Decenter Y (mm)">Dec Y</th>
               <th className="py-2 pr-3" title="Absorption (1/cm) thermal">α</th>
               <th className="py-2 pr-3" title="ISO 10110 scratch/dig">S/D</th>
               <th className="py-2 w-10" />
@@ -886,7 +894,7 @@ export function SystemEditor({
               onClick={addSurfaceAtStart}
               className="border-b border-dashed border-white/20 cursor-pointer bg-slate-900/30 backdrop-blur-[4px] hover:bg-slate-900/50 text-slate-500 hover:text-cyan-electric transition-colors"
             >
-              <td colSpan={15} className="py-2">
+              <td colSpan={17} className="py-2">
                 <span className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   Insert surface at start
@@ -1067,6 +1075,38 @@ export function SystemEditor({
                   />
                 </td>
                 <td className="py-2 pr-3">
+                  <input
+                    type="number"
+                    value={s.decenterX ?? ''}
+                    placeholder="0"
+                    step={0.01}
+                    onChange={(e) =>
+                      updateSurface(s.id, {
+                        decenterX: e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className={`${numericInputClass} min-w-[3.5rem]`}
+                    title="Decenter X (mm)"
+                  />
+                </td>
+                <td className="py-2 pr-3">
+                  <input
+                    type="number"
+                    value={s.decenterY ?? ''}
+                    placeholder="0"
+                    step={0.01}
+                    onChange={(e) =>
+                      updateSurface(s.id, {
+                        decenterY: e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                      })
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    className={`${numericInputClass} min-w-[3.5rem]`}
+                    title="Decenter Y (mm)"
+                  />
+                </td>
+                <td className="py-2 pr-3">
                   {s.type === 'Glass' ? (
                     <input
                       type="number"
@@ -1126,7 +1166,7 @@ export function SystemEditor({
               onClick={() => addSurfaceAtIndex(surfaces.length)}
               className="border-b border-dashed border-white/20 cursor-pointer bg-slate-900/30 backdrop-blur-[4px] hover:bg-slate-900/50 text-slate-500 hover:text-cyan-electric transition-colors"
             >
-              <td colSpan={15} className="py-2">
+              <td colSpan={17} className="py-2">
                 <span className="flex items-center gap-2">
                   <Plus className="w-4 h-4" />
                   Insert surface at end
