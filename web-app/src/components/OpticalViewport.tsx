@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 const DEBUG_HUD_COORDS = import.meta.env.DEV
 /** Debug: log HUD vs Diamond RMS to diagnose math vs rendering bug. */
 const DEBUG_FOCUS_ALIGNMENT = import.meta.env.DEV
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import { Play, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import type { SystemState, TraceResult, MetricsAtZ } from '../types/system'
@@ -209,7 +209,7 @@ function HudRow({
 
 const GRID_SIZE = 64
 const GRID_EXTENT = 10000
-const SCAN_SNAP_PX = 5
+const SCAN_SNAP_PX = 10
 
 type RayPoint = { x: number; y: number }
 type Ray = { points: RayPoint[]; color: string }
@@ -470,6 +470,8 @@ type OpticalViewportProps = {
   highlightedMetric?: HighlightedMetric
   showPersistentHud?: boolean
   showBestFocus?: boolean
+  snapToFocus?: boolean
+  snapToSurface?: boolean
 }
 
 export function OpticalViewport({
@@ -481,6 +483,8 @@ export function OpticalViewport({
   highlightedMetric = null,
   showPersistentHud = false,
   showBestFocus = true,
+  snapToFocus = true,
+  snapToSurface = true,
 }: OpticalViewportProps) {
   const [isTracing, setIsTracing] = useState(false)
   const [isPanning, setIsPanning] = useState(false)
@@ -701,7 +705,9 @@ export function OpticalViewport({
     cursorSvgY: number
     scanSvgX: number
     cursorZ: number
-  }>({ isHovering: false, mouseX: 0, mouseY: 0, cursorSvgX: 0, cursorSvgY: 0, scanSvgX: 0, cursorZ: 0 })
+    /** When snapped to a surface, the 0-based surface index; otherwise null */
+    snappedSurfaceIndex: number | null
+  }>({ isHovering: false, mouseX: 0, mouseY: 0, cursorSvgX: 0, cursorSvgY: 0, scanSvgX: 0, cursorZ: 0, snappedSurfaceIndex: null })
 
   const handleSvgMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
@@ -736,16 +742,42 @@ export function OpticalViewport({
         cursorSvgY = (e.clientY - rect.top - offsetY) / scaleFit
       }
 
-      const snapTargetsZ = [...zPositions]
-      if (traceResult?.focusZ != null) snapTargetsZ.push(traceResult.focusZ)
-      const snapTargetsSvgX = snapTargetsZ.map((z) => z * scale + xOffset)
       let scanSvgX = cursorSvgX
       let bestDist = SCAN_SNAP_PX
-      for (const targetX of snapTargetsSvgX) {
-        const d = Math.abs(cursorSvgX - targetX)
-        if (d < bestDist) {
-          bestDist = d
-          scanSvgX = targetX
+      let snappedSurfaceIndex: number | null = null
+
+      // Priority 1: Surface snap (when snapToSurface, magnetically snap within 10px)
+      if (snapToSurface) {
+        for (let i = 0; i < zPositions.length; i++) {
+          const z = zPositions[i]
+          const targetX = z * scale + xOffset
+          const d = Math.abs(cursorSvgX - targetX)
+          if (d < bestDist) {
+            bestDist = d
+            scanSvgX = targetX
+            snappedSurfaceIndex = i
+          }
+        }
+      }
+      const snappedToSurface = snappedSurfaceIndex != null
+
+      // Priority 2 & 3: Best Focus and paraxial focus (only if not snapped to surface)
+      if (!snappedToSurface) {
+        if (traceResult?.focusZ != null) {
+          const targetX = traceResult.focusZ * scale + xOffset
+          const d = Math.abs(cursorSvgX - targetX)
+          if (d < bestDist) {
+            bestDist = d
+            scanSvgX = targetX
+          }
+        }
+        if (snapToFocus && traceResult?.bestFocusZ != null) {
+          const targetX = traceResult.bestFocusZ * scale + xOffset
+          const d = Math.abs(cursorSvgX - targetX)
+          if (d < bestDist) {
+            bestDist = d
+            scanSvgX = targetX
+          }
         }
       }
       // Optical Z (mm) = (SVG X - xOffset) / scale — NOT screen pixels; SVG X is in viewBox units
@@ -761,9 +793,10 @@ export function OpticalViewport({
         cursorSvgY,
         scanSvgX,
         cursorZ: zCursorPos,
+        snappedSurfaceIndex,
       })
     },
-    [scale, xOffset, viewWidth, viewHeight, zPositions, traceResult?.focusZ]
+    [scale, xOffset, viewWidth, viewHeight, zPositions, traceResult?.focusZ, traceResult?.bestFocusZ, snapToFocus, snapToSurface]
   )
 
   const handleSvgMouseLeave = useCallback(() => {
@@ -1127,23 +1160,23 @@ export function OpticalViewport({
             />
           )}
 
-          {showBestFocus && bestFocusSvgX != null && hasTraced && rays.length > 0 && (
-            <g transform={`translate(${bestFocusSvgX}, ${cy})`}>
+          <AnimatePresence>
+            {showBestFocus && bestFocusSvgX != null && hasTraced && rays.length > 0 && (
               <motion.g
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{
-                  opacity: 1,
-                  scale: [1, 1.2, 1],
+                key="focus-diamond"
+                initial={{ x: bestFocusSvgX, y: cy, opacity: 0, scale: 0 }}
+                animate={{ x: bestFocusSvgX, y: cy, opacity: 1, scale: 1 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                exit={{
+                  x: bestFocusSvgX,
+                  y: cy,
+                  opacity: 0,
+                  scale: 0,
+                  transition: { duration: 0.2 },
                 }}
-                transition={{
-                  opacity: { duration: 0.3, delay: 0.6 },
-                  scale: {
-                    duration: 2.2,
-                    repeat: Infinity,
-                    repeatType: 'reverse',
-                  },
-                }}
+                style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
               >
+                {/* Diamond centered at (0,0) for bulletproof scale-from-center */}
                 <polygon
                   points="0,-6 6,0 0,6 -6,0"
                   fill={systemState.focusMode === 'Balanced' ? '#F59E0B' : 'white'}
@@ -1152,8 +1185,8 @@ export function OpticalViewport({
                   filter="url(#diamond-glow)"
                 />
               </motion.g>
-            </g>
-          )}
+            )}
+          </AnimatePresence>
 
           {scanHud.isHovering && (
             <>
@@ -1162,7 +1195,7 @@ export function OpticalViewport({
                 y1={0}
                 x2={scanHud.scanSvgX}
                 y2={viewHeight}
-                stroke="#22D3EE"
+                stroke={scanHud.snappedSurfaceIndex != null ? '#ffffff' : '#22D3EE'}
                 strokeWidth="1"
                 strokeDasharray="4 4"
                 strokeOpacity="0.8"
@@ -1222,9 +1255,9 @@ export function OpticalViewport({
 
           {showHud && (
             <motion.div
-              className={`pointer-events-none z-50 rounded-lg px-3 py-2 backdrop-blur-[12px] bg-slate-900/70 border border-cyan-electric/50 ${
-                isPersistentHud ? 'absolute bottom-20 left-4' : 'fixed'
-              }`}
+              className={`pointer-events-none z-50 rounded-lg px-3 py-2 backdrop-blur-[12px] bg-slate-900/70 border ${
+                scanHud.snappedSurfaceIndex != null ? 'border-white/60' : 'border-cyan-electric/50'
+              } ${isPersistentHud ? 'absolute bottom-20 left-4' : 'fixed'}`}
               style={{
                 fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
                 ...(isPersistentHud ? {} : { left: scanHud.mouseX + 16, top: scanHud.mouseY + 16 }),
@@ -1234,6 +1267,11 @@ export function OpticalViewport({
               transition={{ type: 'spring', stiffness: 200, damping: 20 }}
               exit={{ opacity: 0, scale: 0.95 }}
             >
+              {scanHud.snappedSurfaceIndex != null && !isPersistentHud && (
+                <div className="text-[10px] font-medium text-white/90 mb-1.5 -mt-0.5">
+                  Surface #{scanHud.snappedSurfaceIndex + 1}
+                </div>
+              )}
               <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs">
                 <HudRow label="Z:" value={`${hudMetrics ? hudMetrics.z.toFixed(2) : hudZ.toFixed(2)} mm`} metricId="z" highlightedMetric={highlightedMetric} />
                 {hudMetrics?.rmsPerField && hudMetrics.rmsPerField.length > 0 ? (

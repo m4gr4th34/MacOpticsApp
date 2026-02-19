@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Magnet } from 'lucide-react'
 import type { SystemState } from '../types/system'
 import { config } from '../config'
 
@@ -10,6 +10,10 @@ type SystemPropertiesProps = {
   onSelectSurface: (id: string | null) => void
   showBestFocus: boolean
   onShowBestFocusChange: (value: boolean) => void
+  snapToFocus: boolean
+  onSnapToFocusChange: (value: boolean) => void
+  snapToSurface: boolean
+  onSnapToSurfaceChange: (value: boolean) => void
 }
 
 const inputClass =
@@ -22,6 +26,10 @@ export function SystemProperties({
   onSelectSurface,
   showBestFocus,
   onShowBestFocusChange,
+  snapToFocus,
+  onSnapToFocusChange,
+  snapToSurface,
+  onSnapToSurfaceChange,
 }: SystemPropertiesProps) {
   const update = (partial: Partial<SystemState>) => {
     onSystemStateChange((prev) => ({ ...prev, ...partial }))
@@ -217,6 +225,71 @@ export function SystemProperties({
             {(systemState.focusMode ?? 'On-Axis') === 'Balanced'
               ? 'Circle of Least Confusion across the entire field of view.'
               : 'Ignores off-axis aberrations when placing the focus diamond.'}
+          </p>
+        </section>
+
+        {/* Snapping & Precision */}
+        <section className="glass-card p-4">
+          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <Magnet className="w-4 h-4 text-cyan-electric" strokeWidth={2} />
+            Snapping & Precision
+          </h3>
+          <div className="space-y-3">
+            <label className="flex items-center justify-between gap-3 cursor-pointer group">
+              <span className="text-sm text-slate-300 group-hover:text-slate-200 transition-colors">
+                Snap to Focus
+              </span>
+              <span
+                role="switch"
+                aria-checked={snapToFocus}
+                tabIndex={0}
+                onClick={() => onSnapToFocusChange(!snapToFocus)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onSnapToFocusChange(!snapToFocus)
+                  }
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out hover:opacity-90 ${
+                  snapToFocus ? 'bg-cyan-electric/40' : 'bg-white/10'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-lg transition-all duration-200 ease-in-out ${
+                    snapToFocus ? 'left-5 bg-cyan-electric' : 'left-0.5'
+                  }`}
+                />
+              </span>
+            </label>
+            <label className="flex items-center justify-between gap-3 cursor-pointer group">
+              <span className="text-sm text-slate-300 group-hover:text-slate-200 transition-colors">
+                Snap to Surface
+              </span>
+              <span
+                role="switch"
+                aria-checked={snapToSurface}
+                tabIndex={0}
+                onClick={() => onSnapToSurfaceChange(!snapToSurface)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onSnapToSurfaceChange(!snapToSurface)
+                  }
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out hover:opacity-90 ${
+                  snapToSurface ? 'bg-cyan-electric/40' : 'bg-white/10'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-lg transition-all duration-200 ease-in-out ${
+                    snapToSurface ? 'left-5 bg-cyan-electric' : 'left-0.5'
+                  }`}
+                />
+              </span>
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Snap to Focus: Gold Diamond. Snap to Surface: lens vertices.
           </p>
         </section>
 

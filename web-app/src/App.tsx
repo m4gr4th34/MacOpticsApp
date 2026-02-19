@@ -65,6 +65,8 @@ function App() {
   const [selectedSurfaceId, setSelectedSurfaceId] = useState<string | null>(null)
   const [highlightedMetric, setHighlightedMetric] = useState<HighlightedMetric>(null)
   const [showBestFocus, setShowBestFocus] = useState(true)
+  const [snapToFocus, setSnapToFocus] = useState(true)
+  const [snapToSurface, setSnapToSurface] = useState(true)
   const [systemState, setSystemState] = useState<SystemState>(() => {
     const loaded = loadLastDesign()
     return loaded ?? { ...DEFAULT_SYSTEM_STATE, ...computePerformance(DEFAULT_SYSTEM_STATE) }
@@ -110,6 +112,8 @@ function App() {
               onSelectSurface={setSelectedSurfaceId}
               highlightedMetric={null}
               showBestFocus={showBestFocus}
+              snapToFocus={snapToFocus}
+              snapToSurface={snapToSurface}
             />
           )}
           {activeTab === 'system' && (
@@ -138,6 +142,8 @@ function App() {
                   highlightedMetric={highlightedMetric}
                   showPersistentHud
                   showBestFocus={showBestFocus}
+                  snapToFocus={snapToFocus}
+                  snapToSurface={snapToSurface}
                 />
               </div>
             </div>
@@ -161,6 +167,10 @@ function App() {
             onSelectSurface={setSelectedSurfaceId}
             showBestFocus={showBestFocus}
             onShowBestFocusChange={setShowBestFocus}
+            snapToFocus={snapToFocus}
+            onSnapToFocusChange={setSnapToFocus}
+            snapToSurface={snapToSurface}
+            onSnapToSurfaceChange={setSnapToSurface}
           />
         </aside>
       </div>

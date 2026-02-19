@@ -10,6 +10,8 @@ type CanvasProps = {
   highlightedMetric?: HighlightedMetric
   showPersistentHud?: boolean
   showBestFocus?: boolean
+  snapToFocus?: boolean
+  snapToSurface?: boolean
 }
 
 export function Canvas({
@@ -20,6 +22,8 @@ export function Canvas({
   highlightedMetric = null,
   showPersistentHud = false,
   showBestFocus = true,
+  snapToFocus = true,
+  snapToSurface = true,
 }: CanvasProps) {
   return (
     <div className="h-full min-h-[500px] w-full">
@@ -32,6 +36,8 @@ export function Canvas({
         highlightedMetric={highlightedMetric}
         showPersistentHud={showPersistentHud}
         showBestFocus={showBestFocus}
+        snapToFocus={snapToFocus}
+        snapToSurface={snapToSurface}
       />
     </div>
   )
