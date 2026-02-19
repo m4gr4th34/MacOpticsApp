@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { isMac } from '../config'
 import type { HighlightedMetric } from '../types/ui'
+import type { SystemState } from '../types/system'
+import { computePerformance } from '../types/system'
 
 const kbdClass =
   'px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-200 font-mono text-[10px] shadow-[0_1px_0_0_rgba(255,255,255,0.1),inset_0_-1px_0_0_rgba(0,0,0,0.3)]'
@@ -164,12 +166,55 @@ const GLOSSARY_ITEMS: {
   },
 ]
 
+/** Low-dispersion preset: Fused Silica lens for ultrafast design */
+function createLowDispersionPreset(): SystemState {
+  const base: SystemState = {
+    entrancePupilDiameter: 10,
+    wavelengths: [587.6, 486.1, 656.3],
+    fieldAngles: [0, 7, 14],
+    numRays: 9,
+    focusMode: 'On-Axis',
+    m2Factor: 1.0,
+    pulseWidthFs: 100,
+    hasTraced: false,
+    surfaces: [
+      {
+        id: crypto.randomUUID(),
+        type: 'Glass',
+        radius: 80,
+        thickness: 6,
+        refractiveIndex: 1.458,
+        diameter: 25,
+        material: 'Fused Silica',
+        description: 'Low-dispersion front',
+      },
+      {
+        id: crypto.randomUUID(),
+        type: 'Air',
+        radius: -80,
+        thickness: 94,
+        refractiveIndex: 1,
+        diameter: 25,
+        material: 'Air',
+        description: 'Back surface',
+      },
+    ],
+    rmsSpotRadius: 0,
+    totalLength: 100,
+    fNumber: 10,
+    traceResult: null,
+    traceError: null,
+  }
+  return { ...base, ...computePerformance(base) }
+}
+
 type InfoPanelProps = {
   highlightedMetric: HighlightedMetric
   onHighlightMetric: (m: HighlightedMetric) => void
+  onSystemStateChange?: (state: SystemState | ((prev: SystemState) => SystemState)) => void
 }
 
-export function InfoPanel({ highlightedMetric, onHighlightMetric }: InfoPanelProps) {
+export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateChange }: InfoPanelProps) {
   const [openSection, setOpenSection] = useState<SectionId | null>('nav')
 
   return (
@@ -282,6 +327,11 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric }: InfoPanelPro
                       pulse broadening. This app models chromatic dispersion and thermal lensing
                       to support pulsed-laser system design.
                     </p>
+                    <p>
+                      Designing for femtosecond pulses? Monitor the <strong className="text-slate-300">GDD</strong> (Group
+                      Delay Dispersion) value in the HUD. Most common glasses add positive GDD, which
+                      stretches your pulse. Aim for zero net GDD for transform-limited pulses.
+                    </p>
                     <ul className="space-y-1.5">
                       <li>
                         • <strong className="text-slate-300">Dispersion</strong> — wavelength-dependent
@@ -296,6 +346,15 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric }: InfoPanelPro
                         pulse metrics when the scan line is active
                       </li>
                     </ul>
+                    {onSystemStateChange && (
+                      <button
+                        type="button"
+                        onClick={() => onSystemStateChange(createLowDispersionPreset())}
+                        className="mt-2 px-3 py-2 rounded-lg text-sm font-medium text-cyan-electric border border-cyan-electric/50 hover:bg-cyan-electric/10 transition-colors"
+                      >
+                        Load Low-Dispersion Presets
+                      </button>
+                    )}
                   </div>
                 )}
                 {id === 'export' && (

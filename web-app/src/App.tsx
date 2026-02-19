@@ -145,6 +145,7 @@ function App() {
                 <InfoPanel
                   highlightedMetric={highlightedMetric}
                   onHighlightMetric={setHighlightedMetric}
+                  onSystemStateChange={onSystemStateChange}
                 />
               </div>
               <div className="flex-1 min-w-0 min-h-[400px]">
