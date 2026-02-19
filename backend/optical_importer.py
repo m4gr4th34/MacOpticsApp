@@ -169,6 +169,7 @@ def _surface_from_lens_x(raw: Dict[str, Any], idx: int) -> Dict[str, Any]:
     diameter = 2 * aperture
     material = str(raw.get("material") or "N-BK7").strip()
     surf_type = str(raw.get("type") or "Glass").strip()
+    coating = None
     if surf_type.lower() in ("air", "object", "image", "stop"):
         surf_type = "Air"
         material = "Air"
@@ -178,6 +179,7 @@ def _surface_from_lens_x(raw: Dict[str, Any], idx: int) -> Dict[str, Any]:
         surf_type = "Glass"
         physics = raw.get("physics") or {}
         sellmeier = physics.get("sellmeier")
+        coating = physics.get("coating")
         if sellmeier and isinstance(sellmeier, dict):
             B = sellmeier.get("B", [0, 0, 0])
             C = sellmeier.get("C", [1, 1, 1])
@@ -201,6 +203,8 @@ def _surface_from_lens_x(raw: Dict[str, Any], idx: int) -> Dict[str, Any]:
     }
     if sellmeier:
         result["sellmeierCoefficients"] = sellmeier
+    if coating and isinstance(coating, str):
+        result["coating"] = str(coating).strip()
     if mfg.get("surface_quality"):
         result["surfaceQuality"] = str(mfg["surface_quality"])
     if mfg.get("radius_tolerance") is not None:

@@ -6,7 +6,8 @@ import { ChevronDown, GripVertical, Plus, Trash2, Search, FileUp, X } from 'luci
 import type { SystemState, Surface } from '../types/system'
 import { config } from '../config'
 import { fetchMaterials, nFromCoeffs, type MaterialOption } from '../api/materials'
-import { fetchCoatings, COATINGS_FALLBACK, type CoatingOption } from '../api/coatings'
+import { fetchCoatings, COATINGS_FALLBACK, fetchReflectivityCurve, getCoatingSwatchStyle, type CoatingOption, type ReflectivityPoint } from '../api/coatings'
+import { ReflectivityCurveGraph } from './ReflectivityCurveGraph'
 import { importLensSystem } from '../api/importLens'
 
 /** Fallback when API is unavailable */
@@ -35,6 +36,7 @@ const numericInputClass =
   'w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-cyan-electric/50 focus:shadow-[0_0_8px_rgba(34,211,238,0.25)] transition-shadow font-mono tabular-nums'
 
 const COMMON_MATERIALS = ['N-BK7', 'Fused Silica']
+const COMMON_COATINGS = ['Uncoated', 'MgF2', 'BBAR']
 
 function MaterialCombobox({
   value,
@@ -257,6 +259,273 @@ function MaterialCombobox({
   )
 }
 
+function CoatingCombobox({
+  value,
+  onChange,
+  onClick,
+  coatings,
+  wavelengthNm,
+  wavelengths,
+}: {
+  value: string
+  onChange: (coating: string) => void
+  onClick?: (e: React.MouseEvent) => void
+  coatings: CoatingOption[]
+  wavelengthNm: number
+  wavelengths: number[]
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [hoveredCoating, setHoveredCoating] = useState<string | null>(null)
+  const [curveCache, setCurveCache] = useState<Record<string, ReflectivityPoint[]>>({})
+  const [curveLoading, setCurveLoading] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const portalRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 })
+
+  const displayValue = value === 'None' || !value ? 'Uncoated' : value
+
+  const minNm = wavelengths.length ? Math.max(350, Math.min(...wavelengths) - 80) : 400
+  const maxNm = wavelengths.length ? Math.min(1200, Math.max(...wavelengths) + 80) : 700
+
+  const updatePosition = useRef(() => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect()
+      setPosition({
+        top: rect.bottom,
+        left: rect.left,
+        width: rect.width,
+      })
+    }
+  })
+
+  const filtered = query.trim()
+    ? coatings.filter((c) =>
+        c.name.toLowerCase().includes(query.toLowerCase()) ||
+        (c.description && c.description.toLowerCase().includes(query.toLowerCase()))
+      )
+    : coatings
+
+  const commonFiltered = filtered.filter((c) => COMMON_COATINGS.includes(c.name))
+  const restFiltered = filtered.filter((c) => !COMMON_COATINGS.includes(c.name))
+
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+
+  useLayoutEffect(() => {
+    if (isOpen && inputRef.current) {
+      updatePosition.current()
+      inputRef.current.focus()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = () => updatePosition.current()
+    window.addEventListener('scroll', handler, true)
+    window.addEventListener('resize', handler)
+    return () => {
+      window.removeEventListener('scroll', handler, true)
+      window.removeEventListener('resize', handler)
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (
+        inputRef.current?.contains(target) ||
+        portalRef.current?.contains(target)
+      ) {
+        return
+      }
+      setQuery('')
+      setIsOpen(false)
+      setHoveredCoating(null)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!hoveredCoating) return
+    if (curveCache[hoveredCoating]) return
+    let cancelled = false
+    setCurveLoading(true)
+    fetchReflectivityCurve(hoveredCoating, minNm, maxNm, 5).then((pts) => {
+      if (!cancelled) setCurveCache((p) => ({ ...p, [hoveredCoating]: pts }))
+      setCurveLoading(false)
+    }).catch(() => setCurveLoading(false))
+    return () => { cancelled = true }
+  }, [hoveredCoating, minNm, maxNm, curveCache])
+
+  const handleSelect = (c: CoatingOption) => {
+    onChange(c.name)
+    setQuery('')
+    setIsOpen(false)
+  }
+
+  const renderOption = (c: CoatingOption) => (
+    <div
+      key={c.name}
+      className="relative"
+      onMouseEnter={() => setHoveredCoating(c.name)}
+      onMouseLeave={() => setHoveredCoating(null)}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          handleSelect(c)
+        }}
+        className="w-full text-left px-2 py-1.5 text-sm hover:bg-cyan-electric/20 text-slate-200 rounded flex items-center gap-2"
+      >
+        <span
+          className="shrink-0 w-3 h-3 rounded-sm border border-white/20"
+          style={getCoatingSwatchStyle(c.name)}
+          title={c.description}
+        />
+        <span>{c.name}</span>
+      </button>
+    </div>
+  )
+
+  const dropdownWidth = Math.max(position.width, 192)
+  const graphPopover =
+    isOpen &&
+    hoveredCoating &&
+    ReactDOM.createPortal(
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.15 }}
+        className="fixed z-[10000] rounded-lg border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur-xl p-2"
+        style={{
+          top: position.top + 4,
+          left: position.left + dropdownWidth + 8,
+        }}
+      >
+        {curveLoading ? (
+          <div className="w-[180px] h-[80px] flex items-center justify-center text-slate-500 text-xs">
+            Loading…
+          </div>
+        ) : curveCache[hoveredCoating] ? (
+          <ReflectivityCurveGraph
+            points={curveCache[hoveredCoating]}
+            systemWavelengthNm={wavelengthNm}
+            minNm={minNm}
+            maxNm={maxNm}
+            coatingName={hoveredCoating}
+          />
+        ) : null}
+      </motion.div>,
+      document.body
+    )
+
+  const dropdownContent =
+    isOpen &&
+    ReactDOM.createPortal(
+      <motion.div
+        ref={portalRef}
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.15 }}
+        className="fixed z-[9999] min-w-[12rem] max-h-64 overflow-auto rounded-lg border border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur-xl"
+        style={{
+          top: position.top + 4,
+          left: position.left,
+          width: dropdownWidth,
+        }}
+      >
+        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-700 bg-slate-900/95 px-2 py-1.5">
+          <Search className="w-4 h-4 shrink-0 text-slate-400" strokeWidth={2} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search coatings..."
+            className="flex-1 bg-transparent text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none"
+            autoComplete="off"
+          />
+        </div>
+        <div className="py-1">
+          {commonFiltered.length > 0 && (
+            <div className="px-2 py-1">
+              <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500 mb-0.5">
+                Common
+              </div>
+              {commonFiltered.map(renderOption)}
+            </div>
+          )}
+          {restFiltered.length > 0 && (
+            <div className="px-2 py-1">
+              {commonFiltered.length > 0 && (
+                <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500 mb-0.5">
+                  All
+                </div>
+              )}
+              {restFiltered.map(renderOption)}
+            </div>
+          )}
+          {filtered.length === 0 && (
+            <div className="px-2 py-3 text-sm text-slate-500">No matches</div>
+          )}
+        </div>
+      </motion.div>,
+      document.body
+    )
+
+  return (
+    <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="flex gap-0.5 flex-1 min-w-0">
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={isOpen ? query : displayValue}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              if (!isOpen) setIsOpen(true)
+            }}
+            onFocus={() => {
+              setQuery(displayValue)
+              setIsOpen(true)
+            }}
+            onClick={onClick}
+            placeholder="Coating..."
+            className={`${inputClass} pl-8`}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (!isOpen) {
+              setQuery(displayValue)
+              updatePosition.current()
+              setTimeout(() => inputRef.current?.focus(), 0)
+            }
+            setIsOpen((o) => !o)
+          }}
+          className="p-1 rounded bg-white/5 border border-white/10 text-slate-400 hover:text-cyan-electric shrink-0"
+          aria-label="Toggle coating list"
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
+        </button>
+      </div>
+      <span
+        className="shrink-0 w-3 h-3 rounded-sm border border-white/20"
+        style={getCoatingSwatchStyle(displayValue)}
+        title={coatings.find((c) => c.name === displayValue)?.description}
+      />
+      {dropdownContent}
+      {graphPopover}
+    </div>
+  )
+}
+
 /** Indices of surfaces with highest sensitivity (for heatmap highlight) */
 function getHighSensitivityIndices(sensitivityBySurface: number[] | null | undefined): Set<number> {
   if (!sensitivityBySurface?.length) return new Set()
@@ -405,6 +674,7 @@ export function SystemEditor({
       diameter: d.diameter,
       material: 'Air',
       description: 'New surface',
+      coating: 'Uncoated',
     }
     onSystemStateChange((prev) => {
       const next = [...prev.surfaces]
@@ -622,24 +892,15 @@ export function SystemEditor({
                     onClick={(e) => e.stopPropagation()}
                   />
                 </td>
-                <td className="py-2 pr-3">
-                  <select
-                    value={s.coating ?? 'None'}
-                    onChange={(e) =>
-                      updateSurface(s.id, {
-                        coating: e.target.value === 'None' ? undefined : e.target.value,
-                      })
-                    }
+                <td className="py-2 pr-3 min-w-[8rem]">
+                  <CoatingCombobox
+                    value={s.coating ?? ''}
+                    coatings={coatings}
+                    wavelengthNm={systemState.wavelengths[0] ?? 587.6}
+                    wavelengths={systemState.wavelengths}
+                    onChange={(coating) => updateSurface(s.id, { coating: coating || undefined })}
                     onClick={(e) => e.stopPropagation()}
-                    className={inputClass}
-                    title="Coating: affects power loss R(λ)"
-                  >
-                    {coatings.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </td>
                 <td className="py-2 pr-3">
                   <input

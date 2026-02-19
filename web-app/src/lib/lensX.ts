@@ -18,6 +18,7 @@ export interface LensXSurface {
   physics?: {
     sellmeier?: { B: number[]; C: number[] }
     refractive_index?: number
+    coating?: string
   }
   manufacturing?: {
     surface_quality?: string
@@ -68,21 +69,27 @@ export function toLensX(
     height = 570,
   } = options
 
-  const lensSurfaces: LensXSurface[] = surfaces.map((s) => ({
-    radius: s.radius ?? 0,
-    thickness: s.thickness ?? 0,
-    aperture: (s.diameter ?? 25) / 2,
-    material: s.material ?? (s.type === 'Air' ? 'Air' : 'N-BK7'),
-    type: s.type ?? (s.refractiveIndex > 1.01 ? 'Glass' : 'Air'),
-    description: s.description ?? '',
-    physics: s.refractiveIndex != null ? { refractive_index: s.refractiveIndex } : undefined,
-    manufacturing: {
-      surface_quality: s.surfaceQuality ?? '3/2',
-      radius_tolerance: s.radiusTolerance,
-      thickness_tolerance: s.thicknessTolerance,
-      tilt_tolerance: s.tiltTolerance,
-    },
-  }))
+  const lensSurfaces: LensXSurface[] = surfaces.map((s) => {
+    const physics: LensXSurface['physics'] = {}
+    if (s.refractiveIndex != null) physics.refractive_index = s.refractiveIndex
+    if (s.sellmeierCoefficients) physics.sellmeier = s.sellmeierCoefficients
+    if (s.coating) physics.coating = s.coating
+    return {
+      radius: s.radius ?? 0,
+      thickness: s.thickness ?? 0,
+      aperture: (s.diameter ?? 25) / 2,
+      material: s.material ?? (s.type === 'Air' ? 'Air' : 'N-BK7'),
+      type: s.type ?? (s.refractiveIndex > 1.01 ? 'Glass' : 'Air'),
+      description: s.description ?? '',
+      physics: Object.keys(physics).length > 0 ? physics : undefined,
+      manufacturing: {
+        surface_quality: s.surfaceQuality ?? '3/2',
+        radius_tolerance: s.radiusTolerance,
+        thickness_tolerance: s.thicknessTolerance,
+        tilt_tolerance: s.tiltTolerance,
+      },
+    }
+  })
 
   const svgPreview = generateIso10110Svg(
     {

@@ -203,6 +203,7 @@ export function ChromaticAberrationOverlay({ systemState, onSystemStateChange, p
       diameter: s0.diameter,
       material: optimizeResult.recommended_glass,
       description: optimizeResult.recommended_glass,
+      coating: 'Uncoated',
     }
     onSystemStateChange((prev) => {
       const next = prev.surfaces.map((s, i) =>

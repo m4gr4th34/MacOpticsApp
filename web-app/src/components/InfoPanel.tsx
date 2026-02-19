@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Dices,
   Palette,
+  Layers,
 } from 'lucide-react'
 import { isMac } from '../config'
 import type { HighlightedMetric } from '../types/ui'
@@ -20,6 +21,7 @@ const kbdClass =
 const SECTIONS = [
   { id: 'nav', title: 'Navigation Shortcuts', icon: MousePointer2 },
   { id: 'laser', title: 'Laser & Gaussian Optics', icon: ScanLine },
+  { id: 'coatings', title: 'Coatings & Reflectivity', icon: Layers },
   { id: 'ultrafast', title: 'Ultrafast / Femtosecond Design', icon: Zap },
   { id: 'chromatic', title: 'Chromatic Analysis & Optimization', icon: Palette },
   { id: 'montecarlo', title: 'Manufacturing Reliability (Monte Carlo)', icon: Dices },
@@ -220,6 +222,25 @@ export function InfoPanel({ highlightedMetric, onHighlightMetric, onSystemStateC
                     <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
                       <p className="text-xs font-medium text-cyan-electric/90 mb-0.5">Pro-Tip</p>
                       <p className="text-slate-400 text-sm leading-relaxed">Note: The Gold Diamond indicates the point of minimum beam waist, which may shift based on lens dispersion.</p>
+                    </div>
+                  </div>
+                )}
+                {id === 'coatings' && (
+                  <div className="space-y-4">
+                    <h4 className="text-slate-300 font-medium text-xs uppercase tracking-wider">
+                      Reflectivity Curve R(λ)
+                    </h4>
+                    <p>
+                      When you <strong className="text-slate-300">hover over a coating option</strong> in the System Editor (e.g. BBAR, MgF₂, V-Coat 532), a small graph appears showing its reflectivity R(λ) across the wavelength range.
+                    </p>
+                    <p>
+                      A <strong className="text-cyan-electric">vertical dashed line</strong> marks your system&apos;s current operating wavelength. Use it to verify that your chosen coating is effective at your design color—for AR coatings, lower R at your wavelength means less power loss.
+                    </p>
+                    <div className="rounded-lg border border-cyan-electric/50 bg-cyan-electric/5 px-3 py-2.5">
+                      <p className="text-xs font-medium text-cyan-electric/90 mb-0.5">Tip</p>
+                      <p className="text-slate-400 text-sm leading-relaxed">
+                        V-Coat 532 is optimized for 532 nm; BBAR is broadband (400–700 nm). HR coatings reflect instead of refract—the ray follows the reflected path.
+                      </p>
                     </div>
                   </div>
                 )}

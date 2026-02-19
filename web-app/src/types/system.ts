@@ -130,6 +130,7 @@ export const DEFAULT_SYSTEM_STATE: SystemState = {
       diameter: 25,
       material: 'N-BK7',
       description: 'Front surface',
+      coating: 'Uncoated',
     },
     {
       id: crypto.randomUUID(),
@@ -140,6 +141,7 @@ export const DEFAULT_SYSTEM_STATE: SystemState = {
       diameter: 25,
       material: 'Air',
       description: 'Back surface',
+      coating: 'Uncoated',
     },
   ],
   rmsSpotRadius: 0,

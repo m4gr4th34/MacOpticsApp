@@ -32,6 +32,7 @@ function normalizeSurface(s: Partial<Surface> & { n?: number }, _i: number): Sur
     tiltTolerance: s.tiltTolerance != null ? Number(s.tiltTolerance) : undefined,
     absorptionCoefficient: s.absorptionCoefficient != null ? Number(s.absorptionCoefficient) : undefined,
     surfaceQuality: s.surfaceQuality != null ? String(s.surfaceQuality) : undefined,
+    coating: s.coating != null ? String(s.coating) : undefined,
   }
 }
 

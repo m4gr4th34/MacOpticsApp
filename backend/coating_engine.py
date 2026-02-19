@@ -65,6 +65,12 @@ def _init_coatings() -> None:
     global _COATINGS
     if _COATINGS:
         return
+    _COATINGS["Uncoated"] = {
+        "name": "Uncoated",
+        "description": "Uncoated (Fresnel ~4% R for glass)",
+        "reflectivity": _r_none,
+        "is_hr": False,
+    }
     _COATINGS["None"] = {
         "name": "None",
         "description": "Uncoated (Fresnel ~4%)",

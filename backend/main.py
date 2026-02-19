@@ -75,6 +75,27 @@ def get_coatings():
     ]
 
 
+@app.get("/api/coatings/{coating_name}/reflectivity")
+def get_coating_reflectivity(
+    coating_name: str,
+    min_nm: float = 400.0,
+    max_nm: float = 700.0,
+    step_nm: float = 5.0,
+):
+    """
+    Return R(λ) curve for a coating across wavelength range.
+    Used for reflectivity graph in coating dropdown.
+    """
+    from coating_engine import get_reflectivity
+    points = []
+    w = min_nm
+    while w <= max_nm:
+        r = get_reflectivity(coating_name or None, w)
+        points.append({"wavelength": round(w, 1), "reflectivity": round(r, 6)})
+        w += step_nm
+    return {"coating": coating_name, "points": points}
+
+
 class GlassMaterial(BaseModel):
     """Optical glass material with Sellmeier dispersion."""
     name: str
