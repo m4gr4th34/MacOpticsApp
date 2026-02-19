@@ -4,6 +4,7 @@ import { Canvas } from './components/Canvas'
 import { SystemEditor } from './components/SystemEditor'
 import { InfoPanel } from './components/InfoPanel'
 import { ExportDrawing } from './components/ExportDrawing'
+import { CoatingLab } from './components/CoatingLab'
 import { SystemProperties } from './components/SystemProperties'
 import {
   DEFAULT_SYSTEM_STATE,
@@ -139,6 +140,7 @@ function App() {
               onMonteCarloSensitivity={setSensitivityBySurface}
             />
           )}
+          {activeTab === 'coating' && <CoatingLab />}
           {activeTab === 'system' && (
             <SystemEditor
               systemState={systemState}
