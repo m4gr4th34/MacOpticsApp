@@ -491,6 +491,8 @@ export function OpticalViewport({
   const [isSpaceHeld, setIsSpaceHeld] = useState(false)
   const [showCausticEnvelope, setShowCausticEnvelope] = useState(false)
   const [fieldFilter, setFieldFilter] = useState<number | null>(null)
+  const [hintVisible, setHintVisible] = useState(false)
+  const hintLeaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const numFields = (systemState.fieldAngles || [0]).length
   useEffect(() => {
@@ -498,6 +500,37 @@ export function OpticalViewport({
       setFieldFilter(null)
     }
   }, [numFields, fieldFilter])
+
+  useEffect(() => {
+    if (isPanning) {
+      setHintVisible(false)
+      if (hintLeaveTimeoutRef.current) {
+        clearTimeout(hintLeaveTimeoutRef.current)
+        hintLeaveTimeoutRef.current = null
+      }
+    }
+  }, [isPanning])
+
+  useEffect(() => {
+    return () => {
+      if (hintLeaveTimeoutRef.current) clearTimeout(hintLeaveTimeoutRef.current)
+    }
+  }, [])
+
+  const handleViewportMouseEnter = useCallback(() => {
+    if (hintLeaveTimeoutRef.current) {
+      clearTimeout(hintLeaveTimeoutRef.current)
+      hintLeaveTimeoutRef.current = null
+    }
+    setHintVisible(true)
+  }, [])
+
+  const handleViewportMouseLeave = useCallback(() => {
+    hintLeaveTimeoutRef.current = setTimeout(() => {
+      hintLeaveTimeoutRef.current = null
+      setHintVisible(false)
+    }, 2000)
+  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1027,6 +1060,8 @@ export function OpticalViewport({
           backgroundColor: '#0B1120',
           border: '1px solid rgba(34, 211, 238, 0.2)',
         }}
+        onMouseEnter={handleViewportMouseEnter}
+        onMouseLeave={handleViewportMouseLeave}
       >
         <TransformWrapper
           initialScale={1}
@@ -1381,6 +1416,24 @@ export function OpticalViewport({
               <Maximize2 className="w-4 h-4" strokeWidth={2} />
               Reset View
             </motion.button>
+          </motion.div>
+
+          <motion.div
+            className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-full text-xs text-slate-300 pointer-events-none bg-slate-900/50 backdrop-blur-[8px] border border-white/10"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{
+              opacity: hintVisible ? 1 : 0,
+              y: hintVisible ? 0 : 20,
+            }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+          >
+            Hold <kbd
+              className={`px-1.5 py-0.5 rounded font-mono text-[10px] transition-all duration-150 ${
+                isSpaceHeld
+                  ? 'bg-cyan-500/30 text-cyan-200 shadow-[0_0_8px_rgba(34,211,238,0.5),0_1px_0_0_rgba(255,255,255,0.15)]'
+                  : 'bg-slate-800/90 text-slate-200 shadow-[0_1px_0_0_rgba(255,255,255,0.1),inset_0_-1px_0_0_rgba(0,0,0,0.3)]'
+              }`}
+            >Space</kbd> + Drag to Pan
           </motion.div>
 
           {showHud && (
