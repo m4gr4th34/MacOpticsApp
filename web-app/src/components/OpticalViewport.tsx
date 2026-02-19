@@ -770,6 +770,7 @@ export function OpticalViewport({
     snappedSurfaceIndex: number | null
   }>({ isHovering: false, mouseX: 0, mouseY: 0, cursorSvgX: 0, cursorSvgY: 0, scanSvgX: 0, cursorZ: 0, snappedSurfaceIndex: null })
 
+  // Snap override: event.altKey handles both Alt (Win/Linux) and Option (Mac) automatically
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.altKey) setIsAltHeld(true)

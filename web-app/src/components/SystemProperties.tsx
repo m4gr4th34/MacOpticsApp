@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Plus, Trash2, Magnet } from 'lucide-react'
 import type { SystemState } from '../types/system'
-import { config } from '../config'
+import { config, isMac } from '../config'
 
 type SystemPropertiesProps = {
   systemState: SystemState
@@ -289,7 +289,11 @@ export function SystemProperties({
             </label>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            Snap to Focus: Gold Diamond. Snap to Surface: lens vertices. Hold <kbd className="px-1 py-0.5 rounded bg-white/10 text-slate-400">Alt</kbd> to disable snapping for fine-grained inspection.
+            Snap to Focus: Gold Diamond. Snap to Surface: lens vertices. Hold{' '}
+            <kbd className="px-1.5 py-0.5 rounded bg-slate-800/90 text-slate-200 font-mono text-[10px] shadow-[0_1px_0_0_rgba(255,255,255,0.1),inset_0_-1px_0_0_rgba(0,0,0,0.3)]">
+              {isMac ? '⌥ Option' : 'Alt'}
+            </kbd>{' '}
+            to disable snapping.
           </p>
         </section>
 

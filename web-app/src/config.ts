@@ -3,6 +3,11 @@
  * Override via environment variables where applicable.
  */
 
+/** Detect Mac platform for keyboard shortcut labels (Option vs Alt) */
+export const isMac =
+  typeof navigator !== 'undefined' &&
+  navigator.platform.toUpperCase().indexOf('MAC') >= 0
+
 export const config = {
   /** Trace API base URL (set VITE_API_URL to override) */
   apiBaseUrl: import.meta.env.VITE_API_URL || 'http://localhost:8000',
