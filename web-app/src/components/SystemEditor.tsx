@@ -1,7 +1,7 @@
 import { useRef, useEffect, useLayoutEffect, useState } from 'react'
 import ReactDOM from 'react-dom'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, GripVertical, Plus, Trash2, Search, FileUp, X } from 'lucide-react'
 import type { SystemState, Surface } from '../types/system'
 import { config } from '../config'
@@ -798,8 +798,30 @@ export function SystemEditor({
                 <motion.tr
                   ref={provided.innerRef}
                   {...provided.draggableProps}
-                  onClick={() => onSelectSurface(s.id)}
-                  title={isHighSensitivity ? 'High Sensitivity: Consider tightening tolerances or choosing a different glass type here' : undefined}
+                  layout
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={
+                    isHighSensitivity
+                      ? {
+                          opacity: 1,
+                          y: 0,
+                          backgroundColor: [
+                            'rgba(239, 68, 68, 0.08)',
+                            'rgba(239, 68, 68, 0.18)',
+                            'rgba(239, 68, 68, 0.08)',
+                          ],
+                        }
+                      : { opacity: 1, y: 0 }
+                  }
+                  transition={
+                    isHighSensitivity
+                      ? {
+                          duration: 2.5,
+                          repeat: Infinity,
+                          repeatType: 'reverse',
+                        }
+                      : { duration: 0.2 }
+                  }
                   className={`border-b border-white/10 cursor-pointer transition-all backdrop-blur-[4px] ${
                     snapshot.isDragging ? 'opacity-90 shadow-lg' : ''
                   } ${
@@ -807,18 +829,6 @@ export function SystemEditor({
                       ? 'border-l-4 border-l-cyan-electric bg-slate-900/50'
                       : 'border-l-4 border-l-transparent hover:bg-slate-900/50'
                   } ${isHighSensitivity ? 'bg-red-500/10' : 'bg-slate-900/30'}`}
-                  animate={isHighSensitivity ? {
-                    backgroundColor: [
-                      'rgba(239, 68, 68, 0.08)',
-                      'rgba(239, 68, 68, 0.18)',
-                      'rgba(239, 68, 68, 0.08)',
-                    ],
-                  } : {}}
-                  transition={isHighSensitivity ? {
-                    duration: 2.5,
-                    repeat: Infinity,
-                    repeatType: 'reverse',
-                  } : {}}
                 >
                 <td
                   {...provided.dragHandleProps}
@@ -1038,22 +1048,25 @@ export function SystemEditor({
           {toastMessage}
         </motion.div>
       )}
-      {importPreview &&
-        ReactDOM.createPortal(
-          <div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      {ReactDOM.createPortal(
+        <AnimatePresence>
+          {importPreview && (
+          <motion.div
+            key="import-preview-modal"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xl p-4 sm:p-6"
             onClick={(e) => e.target === e.currentTarget && cancelImport()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="import-preview-title"
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-md rounded-xl border border-slate-600 bg-slate-900 shadow-2xl"
+            <div
+              className="w-full max-w-4xl max-h-[90vh] rounded-xl border border-slate-600/80 bg-slate-900/80 shadow-2xl backdrop-blur-xl overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
+              <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3 shrink-0">
                 <h3 id="import-preview-title" className="text-lg font-semibold text-cyan-electric">
                   Import Preview
                 </h3>
@@ -1066,84 +1079,151 @@ export function SystemEditor({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-auto p-4">
-                <p className="text-sm text-slate-400 mb-3">
-                  {importPreview.surfaces.length} surface{importPreview.surfaces.length !== 1 ? 's' : ''} found. Click a row to toggle import. Green = included, gray = ignored.
-                </p>
-                <div className="flex gap-2 mb-3">
-                  <button
-                    type="button"
-                    onClick={clearAllAnnotations}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-slate-600"
-                  >
-                    Clear All Annotations
-                  </button>
-                </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-700">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-slate-800/80 text-left text-slate-400">
-                        <th className="py-2 px-3 w-12">Import</th>
-                        <th className="py-2 px-3 w-10">#</th>
-                        <th className="py-2 px-3">Radius (mm)</th>
-                        <th className="py-2 px-3">Material</th>
-                        <th className="py-2 px-3">Thickness (mm)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importPreview.surfaces.map((s, i) => {
-                        const isIgnored = ignoredImportIds.has(s.id)
-                        return (
-                          <tr
-                            key={s.id}
-                            onClick={() => toggleImportIgnore(s.id)}
-                            className={`border-t border-slate-700/80 cursor-pointer transition-colors ${
-                              isIgnored
-                                ? 'opacity-50 bg-slate-800/40 hover:bg-slate-800/60'
-                                : 'bg-emerald-500/10 hover:bg-emerald-500/10 border-l-2 border-l-emerald-500'
-                            }`}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                toggleImportIgnore(s.id)
-                              }
-                            }}
-                            aria-label={`Surface ${i + 1}: ${isIgnored ? 'ignored' : 'included'}, click to toggle`}
-                          >
-                            <td className="py-2 px-3">
-                              <input
-                                type="checkbox"
-                                checked={!isIgnored}
-                                onChange={() => toggleImportIgnore(s.id)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="rounded border-slate-600 bg-slate-800 text-cyan-electric focus:ring-cyan-electric/50"
-                                aria-label={`Include surface ${i + 1}`}
-                              />
-                            </td>
-                            <td className="py-2 px-3 text-slate-400">{i + 1}</td>
-                            <td className="py-2 px-3 text-slate-200 font-mono">
-                              {s.radius === 0 ? '∞' : s.radius.toFixed(2)}
-                            </td>
-                            <td className="py-2 px-3 text-slate-200">{s.material}</td>
-                            <td className="py-2 px-3 text-slate-200 font-mono">
-                              {s.thickness.toFixed(2)}
-                            </td>
+              <div className="flex-1 overflow-auto p-4 min-h-0">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Section A: Surfaces to Import */}
+                  <section className="space-y-3">
+                    <h4 className="text-sm font-medium text-slate-300">Surfaces to Import</h4>
+                    <p className="text-xs text-slate-500">
+                      {importPreview.surfaces.length} surface{importPreview.surfaces.length !== 1 ? 's' : ''} found. Click a row to toggle. Green = included, gray = ignored.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={clearAllAnnotations}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-slate-600"
+                    >
+                      Clear All Annotations
+                    </button>
+                    <div className="overflow-x-auto rounded-lg border border-slate-700">
+                      <table className="w-full text-sm min-w-[280px]">
+                        <thead>
+                          <tr className="bg-slate-800/80 text-left text-slate-400">
+                            <th className="py-2 px-3 w-12">Import</th>
+                            <th className="py-2 px-3 w-10">#</th>
+                            <th className="py-2 px-3">Radius (mm)</th>
+                            <th className="py-2 px-3">Material</th>
+                            <th className="py-2 px-3">Thickness (mm)</th>
                           </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.surfaces.map((s, i) => {
+                            const isIgnored = ignoredImportIds.has(s.id)
+                            return (
+                              <tr
+                                key={s.id}
+                                onClick={() => toggleImportIgnore(s.id)}
+                                className={`border-t border-slate-700/80 cursor-pointer transition-colors ${
+                                  isIgnored
+                                    ? 'opacity-50 bg-slate-800/40 hover:bg-slate-800/60'
+                                    : 'bg-emerald-500/10 hover:bg-emerald-500/10 border-l-2 border-l-emerald-500'
+                                }`}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    toggleImportIgnore(s.id)
+                                  }
+                                }}
+                                aria-label={`Surface ${i + 1}: ${isIgnored ? 'ignored' : 'included'}, click to toggle`}
+                              >
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={!isIgnored}
+                                    onChange={() => toggleImportIgnore(s.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="rounded border-slate-600 bg-slate-800 text-cyan-electric focus:ring-cyan-electric/50"
+                                    aria-label={`Include surface ${i + 1}`}
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-slate-400">{i + 1}</td>
+                                <td className="py-2 px-3 text-slate-200 font-mono">
+                                  {s.radius === 0 ? '∞' : s.radius.toFixed(2)}
+                                </td>
+                                <td className="py-2 px-3 text-slate-200">{s.material}</td>
+                                <td className="py-2 px-3 text-slate-200 font-mono">
+                                  {s.thickness.toFixed(2)}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  {/* Section B: Target Location with Drop Zones */}
+                  <section className="space-y-3">
+                    <h4 className="text-sm font-medium text-slate-300">Target Location</h4>
+                    <p className="text-xs text-slate-500">
+                      Click a drop zone to choose where to insert the imported surfaces.
+                    </p>
+                    <div className="rounded-lg border border-slate-700 overflow-hidden space-y-0">
+                      {(() => {
+                        const count = importPreview.surfaces.length - ignoredImportIds.size
+                        const setInsertIndex = (idx: number) =>
+                          setImportPreview((prev) => (prev ? { ...prev, insertIndex: idx } : null))
+                        return (
+                          <>
+                            {/* Top of Stack */}
+                            <button
+                              type="button"
+                              onClick={() => setInsertIndex(0)}
+                              className={`w-full py-3 px-4 text-left text-sm border-2 border-dashed transition-all hover:bg-cyan-500/20 hover:shadow-[0_0_12px_rgba(34,211,238,0.12)] ${
+                                importPreview.insertIndex === 0
+                                  ? 'bg-cyan-500/20 border-cyan-electric/50'
+                                  : 'border-slate-600/80 text-slate-400 hover:border-cyan-electric/30'
+                              }`}
+                            >
+                              <span className="font-medium text-slate-300">Top of Stack</span>
+                              <span className="block text-xs mt-0.5 text-slate-500">
+                                Insert {count} surface{count !== 1 ? 's' : ''} here
+                              </span>
+                            </button>
+                            {surfaces.map((s, i) => (
+                              <div key={s.id}>
+                                <div className="py-2 px-4 bg-slate-800/50 border-b border-slate-700/80 text-sm text-slate-300">
+                                  {i + 1}. {s.material} — R: {s.radius === 0 ? '∞' : s.radius.toFixed(2)} mm
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setInsertIndex(i + 1)}
+                                  className={`w-full py-3 px-4 text-left text-sm border-2 border-dashed transition-all hover:bg-cyan-500/20 hover:shadow-[0_0_12px_rgba(34,211,238,0.12)] ${
+                                    importPreview.insertIndex === i + 1
+                                      ? 'bg-cyan-500/20 border-cyan-electric/50'
+                                      : 'border-slate-600/80 text-slate-400 hover:border-cyan-electric/30'
+                                  }`}
+                                >
+                                  <span className="block text-xs text-slate-500">
+                                    Insert {count} surface{count !== 1 ? 's' : ''} here
+                                  </span>
+                                </button>
+                              </div>
+                            ))}
+                            {/* End of Stack */}
+                            <button
+                              type="button"
+                              onClick={() => setInsertIndex(surfaces.length)}
+                              className={`w-full py-3 px-4 text-left text-sm border-2 border-dashed transition-all hover:bg-cyan-500/20 hover:shadow-[0_0_12px_rgba(34,211,238,0.12)] ${
+                                importPreview.insertIndex === surfaces.length
+                                  ? 'bg-cyan-500/20 border-cyan-electric/50'
+                                  : 'border-slate-600/80 text-slate-400 hover:border-cyan-electric/30'
+                              }`}
+                            >
+                              <span className="font-medium text-slate-300">End of Stack</span>
+                              <span className="block text-xs mt-0.5 text-slate-500">
+                                Insert {count} surface{count !== 1 ? 's' : ''} here
+                              </span>
+                            </button>
+                          </>
                         )
-                      })}
-                    </tbody>
-                  </table>
+                      })()}
+                    </div>
+                  </section>
                 </div>
-                <p className="mt-3 text-xs text-slate-500">
-                  Importing {importPreview.surfaces.length - ignoredImportIds.size} of {importPreview.surfaces.length} surfaces
-                  {importPreview.insertIndex < surfaces.length
-                    ? ` at position ${importPreview.insertIndex + 1}`
-                    : ' at end'}
-                </p>
               </div>
-              <div className="flex justify-end gap-2 border-t border-slate-700 px-4 py-3">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 border-t border-slate-700 px-4 py-3 shrink-0">
                 <button
                   type="button"
                   onClick={cancelImport}
@@ -1160,10 +1240,12 @@ export function SystemEditor({
                   Confirm Import
                 </button>
               </div>
-            </motion.div>
-          </div>,
-          document.body
-        )}
+            </div>
+          </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }
