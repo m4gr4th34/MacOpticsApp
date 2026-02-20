@@ -8,7 +8,9 @@ import numpy as np
 
 # Epsilon to advance ray past surface after refraction; prevents re-intersection.
 NUDGE_EPS = 1e-6
-SURFACE_EPS = 1e-9  # Minimum t for sphere intersection (avoid re-hit)
+# Minimum t for sphere intersection: strictly > T_MIN to pick exit hit when inside lens.
+# Use 1e-4 to avoid re-hitting surface after nudge; ensures correct exit root for 7° rays.
+T_MIN = 1e-4
 
 # Ray start z: negative to give 'runway' before first surface at z=0.
 RAY_START_Z = -10.0
@@ -79,7 +81,7 @@ def refract(v_in, normal, n1, n2):
     c = -(nx * vx + ny * vy)  # c = -N·v_in
     radicand = 1.0 - r * r * (1.0 - c * c)
     if radicand < 0:
-        return (0, 0, True, {"n1": n1, "n2": n2, "resultant": [0, 0], "msg": "TIR"})
+        return (0, 0, True, {"n1": n1, "n2": n2, "resultant": [0, 0], "msg": "TIR", "radicand": float(radicand)})
     sqrt_term = np.sqrt(radicand)
     coeff = r * c - sqrt_term
     out_dz = r * vx + coeff * nx
@@ -91,11 +93,13 @@ def refract(v_in, normal, n1, n2):
     return (float(out_dz), float(out_dy), False, {"n1": n1, "n2": n2, "resultant": [out_dz, out_dy]})
 
 
-def _log_termination(reason, surf_idx, ray_z, ray_y, extra=None, direction_vector=None, current_z=None, n1=None, n2=None, resultant=None, wvl_nm=None):
+def _log_termination(reason, surf_idx, ray_z, ray_y, extra=None, direction_vector=None, current_z=None, n1=None, n2=None, resultant=None, wvl_nm=None, ray_origin=None):
     """Sanity-check log when a ray terminates. Stored for trace result."""
     global _termination_log
     try:
         msg = {"reason": reason, "surf": surf_idx, "z": float(ray_z), "y": float(ray_y)}
+        if ray_origin is not None:
+            msg["ray_origin"] = [float(ray_origin[0]), float(ray_origin[1])]
         if direction_vector is not None:
             msg["direction_vector"] = [float(direction_vector[0]), float(direction_vector[1])]
         if current_z is not None:
@@ -151,7 +155,10 @@ def trace_ray(ray_z, ray_y, ray_dz, ray_dy, surfaces, wvl_nm, cumulative_z, z_ta
                 break
             t_hit = (z_surf - ray_z) / ray_dz
             if t_hit < -1e-12:
-                _log_termination(TERM_MISSED, i, ray_z, ray_y, {"msg": "plano t_hit negative"}, (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm)
+                _log_termination(TERM_MISSED, i, ray_z, ray_y,
+                    {"msg": "plano t_hit negative", "t_hit": float(t_hit)},
+                    (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm,
+                    ray_origin=(ray_z, ray_y))
                 completed_all = False
                 break
             if t_hit < 0:
@@ -170,15 +177,21 @@ def trace_ray(ray_z, ray_y, ray_dz, ray_dy, surfaces, wvl_nm, cumulative_z, z_ta
             c_coef = Lz**2 + Ly**2 - radius**2
             disc = b**2 - 4 * a * c_coef
             if disc < 0:
-                _log_termination(TERM_MISSED, i, ray_z, ray_y, {"disc": float(disc)}, (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm)
+                _log_termination(TERM_MISSED, i, ray_z, ray_y,
+                    {"disc": float(disc), "current_z": float(z_vertex), "center_z": float(center_z), "radius": float(radius)},
+                    (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm,
+                    ray_origin=(ray_z, ray_y))
                 completed_all = False
                 break
             sqrt_d = np.sqrt(disc)
             t1 = (-b - sqrt_d) / (2 * a)
             t2 = (-b + sqrt_d) / (2 * a)
-            candidates = [t for t in (t1, t2) if t > SURFACE_EPS]
+            candidates = [t for t in (t1, t2) if t > T_MIN]
             if not candidates:
-                _log_termination(TERM_NUMERICAL, i, ray_z, ray_y, {"t1": float(t1), "t2": float(t2)}, (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm)
+                _log_termination(TERM_NUMERICAL, i, ray_z, ray_y,
+                    {"t1": float(t1), "t2": float(t2), "disc": float(disc), "current_z": float(z_vertex), "msg": "no t > T_MIN"},
+                    (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm,
+                    ray_origin=(ray_z, ray_y))
                 completed_all = False
                 break
             t_hit = min(candidates)
@@ -191,7 +204,10 @@ def trace_ray(ray_z, ray_y, ray_dz, ray_dy, surfaces, wvl_nm, cumulative_z, z_ta
                 normal = (-nx, -ny)
 
         if abs(y_surf) > semi:
-            _log_termination(TERM_APERTURE, i, ray_z, ray_y, {"y_surf": float(y_surf), "semi": float(semi)}, (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm)
+            _log_termination(TERM_APERTURE, i, ray_z, ray_y,
+                {"y_surf": float(y_surf), "semi": float(semi)},
+                (ray_dz, ray_dy), z_vertex, n1=n_before, n2=n_after, wvl_nm=wvl_nm,
+                ray_origin=(ray_z, ray_y))
             completed_all = False
             break
 
@@ -204,7 +220,8 @@ def trace_ray(ray_z, ray_y, ray_dz, ray_dy, surfaces, wvl_nm, cumulative_z, z_ta
         ray_dz, ray_dy, tir, diag = refract(v_in, normal, n_before, n_after)
         if tir:
             _log_termination(TERM_TIR, i, hit_z, hit_y, diag, v_in, z_vertex,
-                            n1=diag.get("n1"), n2=diag.get("n2"), resultant=diag.get("resultant"), wvl_nm=wvl_nm)
+                            n1=diag.get("n1"), n2=diag.get("n2"), resultant=diag.get("resultant"), wvl_nm=wvl_nm,
+                            ray_origin=(ray_z, ray_y))
             completed_all = False
             break
         if abs(ray_dz) < 1e-12 and abs(ray_dy) < 1e-12:
