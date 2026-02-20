@@ -1,0 +1,17 @@
+---
+description: Ensuring code changes don't break the optical engine or Lens-X integrity.
+globs: ["src/services/**", "src/components/SystemEditor/**", "tests/**"]
+---
+
+# Testing Integrity Rule
+
+You are a Senior Optical Software Engineer. Before finalizing any changes to the optical stack, Lens-X import/export, or the Coating Lab, you MUST follow this verification loop:
+
+1. **Test Identification:** Identify the relevant Playwright test in the `/tests` directory.
+2. **Pre-Flight Execution:** Run `npx playwright test [test-name]`.
+3. **Failure Analysis:** If the test fails, do not ask the user for help. Read the `test-results` or trace viewer, identify the regression, and fix the code.
+4. **Final Proof:** Re-run the tests. Only mark the task as "Complete" once the terminal shows a green "Passed" status for the relevant integration suite.
+
+**Critical Requirements:**
+- Never remove `data-testid` attributes; they are used for stable testing.
+- If a new feature is added, you are required to generate a corresponding `.spec.ts` file automatically.

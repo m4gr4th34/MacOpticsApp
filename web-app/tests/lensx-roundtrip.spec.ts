@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import { test, expect } from '@playwright/test'
 
 test.describe('Lens-X Round-Trip', () => {
@@ -16,6 +18,8 @@ test.describe('Lens-X Round-Trip', () => {
 
     // Open coating dropdown for first surface and select BBAR
     await page.getByTestId('surface-0-coating-cell').locator('input').click()
+    // Clear the search filter (opens with current value "Uncoated", which hides BBAR)
+    await page.getByPlaceholder('Search coatings...').fill('')
     await page.getByTestId('coating-option-BBAR').click()
 
     // 3. Navigate to Export and click Download LENS-X JSON
@@ -23,19 +27,25 @@ test.describe('Lens-X Round-Trip', () => {
     const downloadPromise = page.waitForEvent('download')
     await page.getByTestId('export-lensx-json').click()
     const download = await downloadPromise
-    const downloadPath = await download.path()
-    expect(downloadPath).toBeTruthy()
+    const outDir = path.join(process.cwd(), 'test-results')
+    fs.mkdirSync(outDir, { recursive: true })
+    const downloadPath = path.join(outDir, `roundtrip-${Date.now()}.lensx`)
+    await download.saveAs(downloadPath)
 
     // 4. Load the exported file to "re-import"
     await page.getByTestId('nav-system').click()
     await page.getByTestId('load-project').click()
-    await page.getByTestId('load-project-input').setInputFiles(downloadPath!)
+    await page.getByTestId('load-project-input').setInputFiles(downloadPath)
     await expect(page.getByTestId('load-confirm-proceed')).toBeVisible()
     await page.getByTestId('load-confirm-proceed').click()
 
-    // 5. Verify radius and coating are identical
-    await expect(page.getByTestId('surface-0-radius')).toHaveValue('100')
+    // 5. Wait for modal to close and state to update
+    await expect(page.getByTestId('load-confirm-proceed')).not.toBeVisible({ timeout: 5000 })
+
+    // 6. Verify radius and coating are identical (wait for UI to reflect imported state)
+    const radiusInputAfter = page.getByTestId('surface-0-radius')
+    await expect(radiusInputAfter).toHaveValue('100', { timeout: 10000 })
     const coatingCell = page.getByTestId('surface-0-coating-cell')
-    await expect(coatingCell.locator('input')).toHaveValue('BBAR')
+    await expect(coatingCell.locator('input')).toHaveValue('BBAR', { timeout: 5000 })
   })
 })

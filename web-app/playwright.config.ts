@@ -30,7 +30,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     env: process.env.CI ? { VITE_API_URL: 'http://localhost:8000' } : undefined,
   },
 })
