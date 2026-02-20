@@ -10,7 +10,9 @@ test.describe('Coating Lab', () => {
 
     // 2. Open catalog and select BBAR
     await page.getByTestId('coating-browse-catalog').click()
-    await page.getByTestId('coating-catalog-BBAR').click()
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByTestId('coating-catalog-BBAR')).toBeVisible({ timeout: 10000 })
+    await page.getByTestId('coating-catalog-BBAR').click({ timeout: 15000 })
 
     // 3. Verify Spectral Performance graph is visible with BBAR data
     const spectralGraph = page.getByTestId('spectral-performance-graph')
