@@ -43,10 +43,10 @@ __payload__ = json.loads(base64.b64decode("${b64}").decode())
 __result__ = run_trace(__payload__)
 __result__
 `;
-      const TRACE_TIMEOUT_MS = 30000;
+      const TRACE_TIMEOUT_MS = 15000;
       const runTrace = pyodide.runPythonAsync(code);
       const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Trace timed out after 30s')), TRACE_TIMEOUT_MS)
+        setTimeout(() => reject(new Error('Trace timed out after 15s')), TRACE_TIMEOUT_MS)
       );
       const result = await Promise.race([runTrace, timeout]);
       const jsResult = result?.toJs ? result.toJs() : (result ?? {});

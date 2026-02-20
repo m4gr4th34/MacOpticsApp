@@ -11,7 +11,7 @@
     "grepInvert": null,
     "maxFailures": 0,
     "metadata": {
-      "actualWorkers": 4
+      "actualWorkers": 8
     },
     "preserveOutput": "always",
     "projects": [
@@ -20,7 +20,7 @@
         "repeatEach": 1,
         "retries": 0,
         "metadata": {
-          "actualWorkers": 4
+          "actualWorkers": 8
         },
         "id": "chromium",
         "name": "chromium",
@@ -71,6 +71,214 @@
   },
   "suites": [
     {
+      "title": "coating-lab.spec.ts",
+      "file": "coating-lab.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Coating Lab",
+          "file": "coating-lab.spec.ts",
+          "line": 3,
+          "column": 6,
+          "specs": [
+            {
+              "title": "BBAR selection shows Spectral Performance graph",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2491,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-20T21:57:30.904Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d4b737c825f53cac1adf-d7e566c51192d2b4379d",
+              "file": "coating-lab.spec.ts",
+              "line": 4,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "example.spec.ts",
+      "file": "example.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "MacOptics E2E",
+          "file": "example.spec.ts",
+          "line": 3,
+          "column": 6,
+          "specs": [
+            {
+              "title": "app loads",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 1002,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-20T21:57:30.898Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a30a6eba6312f6b87ea5-fb2556f4b23c48d82146",
+              "file": "example.spec.ts",
+              "line": 4,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "lensx-roundtrip.spec.ts",
+      "file": "lensx-roundtrip.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Lens-X Round-Trip",
+          "file": "lensx-roundtrip.spec.ts",
+          "line": 21,
+          "column": 6,
+          "specs": [
+            {
+              "title": "export and re-import preserves radius and coating",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 3894,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Cleaning up temporary Lens-X files...\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-20T21:57:30.910Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "903dff96688c167adfee-0b431eaca76089e13815",
+              "file": "lensx-roundtrip.spec.ts",
+              "line": 37,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "monte-carlo.spec.ts",
+      "file": "monte-carlo.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Monte Carlo",
+          "file": "monte-carlo.spec.ts",
+          "line": 3,
+          "column": 6,
+          "specs": [
+            {
+              "title": "changing Tilt in System Editor updates the input value",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 2489,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-02-20T21:57:30.905Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "23f4f923a28df3d5e9e9-001f53cea544d05883fe",
+              "file": "monte-carlo.spec.ts",
+              "line": 4,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
       "title": "pyodide-engine.spec.ts",
       "file": "pyodide-engine.spec.ts",
       "column": 0,
@@ -96,15 +304,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 0,
-                      "parallelIndex": 0,
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
                       "status": "passed",
-                      "duration": 1510,
+                      "duration": 2281,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-02-20T20:50:01.187Z",
+                      "startTime": "2026-02-20T21:57:30.900Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -130,15 +338,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 1,
-                      "parallelIndex": 1,
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
                       "status": "passed",
-                      "duration": 2134,
+                      "duration": 2980,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-02-20T20:50:01.188Z",
+                      "startTime": "2026-02-20T21:57:30.908Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -164,15 +372,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 2,
-                      "parallelIndex": 2,
+                      "workerIndex": 6,
+                      "parallelIndex": 6,
                       "status": "passed",
-                      "duration": 1541,
+                      "duration": 2232,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-02-20T20:50:01.190Z",
+                      "startTime": "2026-02-20T21:57:30.904Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -206,15 +414,15 @@
                   "projectName": "chromium",
                   "results": [
                     {
-                      "workerIndex": 3,
-                      "parallelIndex": 3,
+                      "workerIndex": 7,
+                      "parallelIndex": 7,
                       "status": "passed",
-                      "duration": 1485,
+                      "duration": 2293,
                       "errors": [],
                       "stdout": [],
                       "stderr": [],
                       "retry": 0,
-                      "startTime": "2026-02-20T20:50:01.187Z",
+                      "startTime": "2026-02-20T21:57:30.906Z",
                       "annotations": [],
                       "attachments": []
                     }
@@ -234,9 +442,9 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-02-20T20:50:00.625Z",
-    "duration": 3343.1450000000004,
-    "expected": 4,
+    "startTime": "2026-02-20T21:57:30.243Z",
+    "duration": 5341.269,
+    "expected": 8,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

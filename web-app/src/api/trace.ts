@@ -44,6 +44,7 @@ export type TraceResponse = {
     surf: number
     z: number
     y: number
+    ray_origin?: [number, number]
     direction_vector?: [number, number]
     current_z?: number
     n1?: number

@@ -1527,7 +1527,7 @@ export function OpticalViewport({
             <g
               key={origIdx}
               stroke={group.color}
-              strokeWidth="0.75"
+              strokeWidth="0.5"
               strokeOpacity="0.8"
               fill="none"
               style={{ filter: `drop-shadow(0 0 1px ${group.color}40)` }}
@@ -1544,7 +1544,7 @@ export function OpticalViewport({
                   .reduce((n, g) => n + g.rays.length, 0) + rayIdx
                 return (
                   <motion.path
-                    key={`field-${origIdx}-ray-${rayIdx}`}
+                    key={`field-${origIdx}-ray-${rayIdx}-${pts[0]?.x ?? 0}-${pts[0]?.y ?? 0}`}
                     d={d}
                     fill="none"
                     initial={{ pathLength: 0, opacity: 0 }}
@@ -1556,7 +1556,7 @@ export function OpticalViewport({
                     transition={
                       isTracing
                         ? { opacity: { duration: 0.8, repeat: Infinity, ease: 'easeInOut' } }
-                        : { duration: 0.6, delay: globalIdx * 0.03 }
+                        : { duration: 0.35, delay: globalIdx * 0.012, ease: 'easeOut' }
                     }
                   />
                 )
@@ -1746,6 +1746,30 @@ export function OpticalViewport({
                   <span className="w-2 h-2 rounded-full bg-red-500/80" />
                   Outliers
                 </span>
+              </div>
+            </motion.div>
+          )}
+
+          {hasTraced && (systemState.fieldAngles?.length ?? 0) > 0 && (
+            <motion.div
+              className="absolute top-3 right-3 z-[5] px-3 py-2 rounded-lg pointer-events-none bg-slate-900/40 backdrop-blur-md border border-white/10 shadow-lg"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            >
+              <div className="flex flex-col gap-1.5">
+                {(systemState.fieldAngles || [0]).slice(0, config.rayColors.length).map((angle, idx) => {
+                  const color = config.rayColors[Math.min(idx, config.rayColors.length - 1)]
+                  return (
+                    <div key={idx} className="flex items-center gap-2 text-xs text-slate-300">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}60` }}
+                      />
+                      <span>{Number(angle).toFixed(1)}° Field</span>
+                    </div>
+                  )
+                })}
               </div>
             </motion.div>
           )}
