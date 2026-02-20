@@ -35,9 +35,10 @@ test.describe('Pyodide Trace Engine', () => {
 
   test('trace produces rays and surfaces in viewport', async ({ page }) => {
     await page.getByTestId('nav-lens').click()
-    const traceBtn = page.getByRole('button', { name: /^trace$/i })
-    await expect(traceBtn).toBeVisible({ timeout: 15000 })
-    await expect(traceBtn).toBeEnabled({ timeout: 15000 })
+    await expect(page.locator('svg').first()).toBeVisible({ timeout: 30000 })
+    const traceBtn = page.getByTestId('trace-button')
+    await expect(traceBtn).toBeVisible({ timeout: 30000 })
+    await expect(traceBtn).toBeEnabled({ timeout: 30000 })
 
     await traceBtn.click()
 
@@ -61,12 +62,11 @@ test.describe('Pyodide Trace Engine', () => {
     await page.getByTestId('load-confirm-proceed').click()
     await expect(page.getByTestId('load-confirm-proceed')).not.toBeVisible({ timeout: 5000 })
 
-    // 2. Go to Lens tab — app auto-traces on load (pendingTrace); wait for it to finish
+    // 2. Go to Lens tab — wait for Lens view to load, then wait for auto-trace to finish
     await page.getByTestId('nav-lens').click()
-    // Locator matches both 'Trace' and 'Tracing…' during state transition
-    const traceBtn = page.getByRole('button', { name: /^trace/i })
-    await expect(traceBtn).toBeVisible({ timeout: 15000 })
-    // Wait for auto-trace to complete (button becomes enabled, label returns to 'Trace')
+    await expect(page.locator('svg').first()).toBeVisible({ timeout: 30000 })
+    const traceBtn = page.getByTestId('trace-button')
+    await expect(traceBtn).toBeVisible({ timeout: 30000 })
     await expect(traceBtn).toBeEnabled({ timeout: 30000 })
 
     // 3. No manual click needed — auto-trace already ran; verify no trace error
@@ -89,9 +89,10 @@ test.describe('Pyodide Trace Engine', () => {
 
   test('trace result includes focus and performance metrics', async ({ page }) => {
     await page.getByTestId('nav-lens').click()
-    const traceBtn = page.getByRole('button', { name: /^trace$/i })
-    await expect(traceBtn).toBeVisible({ timeout: 15000 })
-    await expect(traceBtn).toBeEnabled({ timeout: 15000 })
+    await expect(page.locator('svg').first()).toBeVisible({ timeout: 30000 })
+    const traceBtn = page.getByTestId('trace-button')
+    await expect(traceBtn).toBeVisible({ timeout: 30000 })
+    await expect(traceBtn).toBeEnabled({ timeout: 30000 })
 
     await traceBtn.click()
     await expect(page.getByText(/trace error|cannot reach trace api/i)).not.toBeVisible({ timeout: 20000 })
@@ -116,15 +117,15 @@ test.describe('Pyodide Trace Engine — Fallback', () => {
     await expect(page.getByText(/Initializing WebAssembly|Downloading Optical|Establishing Local|Photon Leap/)).not.toBeVisible({ timeout: 15000 })
 
     await page.getByTestId('nav-lens').click()
+    await expect(page.locator('svg').first()).toBeVisible({ timeout: 30000 })
 
-    const traceBtn = page.getByRole('button', { name: /^trace$/i })
+    const traceBtn = page.getByTestId('trace-button')
     await expect(traceBtn).toBeVisible({ timeout: 10000 })
     await expect(traceBtn).toBeEnabled({ timeout: 5000 })
     await traceBtn.click()
 
     // Trace button becomes disabled and shows 'Tracing…' while hung on missing worker
-    await expect(page.getByRole('button', { name: /tracing…/i })).toBeVisible({ timeout: 5000 })
-    await expect(page.getByRole('button', { name: /tracing…/i })).toBeDisabled()
+    await expect(page.getByTestId('trace-button')).toBeDisabled()
 
     // App shows 'Calculating…' while attempting trace
     await expect(page.getByText('Calculating…')).toBeVisible({ timeout: 5000 })

@@ -1121,6 +1121,7 @@ export function OpticalViewport({
     <div className={`relative ${className}`}>
       <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-4 glass-card px-4 py-2 rounded-lg">
         <motion.button
+          data-testid="trace-button"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.98 }}
           onClick={handleTrace}
