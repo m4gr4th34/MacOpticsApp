@@ -2,7 +2,38 @@ import fs from 'fs'
 import path from 'path'
 import { test, expect } from '@playwright/test'
 
+function findLensxFiles(dir: string): string[] {
+  const files: string[] = []
+  try {
+    if (!fs.existsSync(dir)) return files
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const e of entries) {
+      if (e.isFile() && e.name.endsWith('.lensx')) {
+        files.push(path.join(dir, e.name))
+      }
+    }
+  } catch {
+    // ignore read errors
+  }
+  return files
+}
+
 test.describe('Lens-X Round-Trip', () => {
+  test.afterAll(() => {
+    console.log('Cleaning up temporary Lens-X files...')
+    const root = process.cwd()
+    const testResults = path.join(root, 'test-results')
+    for (const dir of [root, testResults]) {
+      for (const file of findLensxFiles(dir)) {
+        try {
+          fs.unlinkSync(file)
+        } catch {
+          // file may be gone or locked; ignore
+        }
+      }
+    }
+  })
+
   test('export and re-import preserves radius and coating', async ({ page }) => {
     await page.goto('/')
 
