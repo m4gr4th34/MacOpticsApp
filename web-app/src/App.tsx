@@ -1,3 +1,4 @@
+/** MacOptics v2.0 — GitHub Pages deploy */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { NavBar, type NavTab } from './components/NavBar'
 import { Canvas } from './components/Canvas'
