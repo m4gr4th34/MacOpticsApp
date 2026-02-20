@@ -111,3 +111,9 @@ export function isPyodideEnabled(): boolean {
   return typeof import.meta.env.VITE_USE_PYODIDE !== 'undefined' &&
     import.meta.env.VITE_USE_PYODIDE === 'true'
 }
+
+/** Resolves when the Pyodide worker is ready. Resolves immediately if Pyodide is disabled. */
+export function waitForPyodideReady(): Promise<void> {
+  if (!isPyodideEnabled()) return Promise.resolve()
+  return ensureWorker().then(() => {})
+}

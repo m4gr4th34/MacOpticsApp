@@ -1,6 +1,7 @@
 /** MacOptics v2.0 — GitHub Pages deploy */
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { NavBar, type NavTab } from './components/NavBar'
+import { isPyodideEnabled, waitForPyodideReady } from './lib/pythonBridge'
 import { Canvas } from './components/Canvas'
 import { SystemEditor } from './components/SystemEditor'
 import { InfoPanel } from './components/InfoPanel'
@@ -72,6 +73,82 @@ function loadLastDesign(): SystemState | null {
 
 import type { HighlightedMetric } from './types/ui'
 
+const BOOT_MESSAGES = [
+  '[ SYSTEM ] Initializing WebAssembly Runtime...',
+  '[ CORE ] Downloading Optical Physics Libraries (NumPy)...',
+  '[ NEURAL ] Establishing Local Memory Bridge...',
+  '[ READY ] Photon Leap V2.0 Active.',
+] as const
+
+function NeuralLinkBootSequence({ onReady }: { onReady: () => void }) {
+  const [messageIndex, setMessageIndex] = useState(0)
+  const [progress, setProgress] = useState(0)
+  const [isComplete, setIsComplete] = useState(false)
+  const rafRef = useRef<number>()
+
+  useEffect(() => {
+    let cancelled = false
+    let timeoutId: ReturnType<typeof setTimeout>
+    waitForPyodideReady().then(() => {
+      if (cancelled) return
+      setMessageIndex(BOOT_MESSAGES.length - 1)
+      setProgress(100)
+      setIsComplete(true)
+      timeoutId = setTimeout(onReady, 800)
+    })
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+    }
+  }, [onReady])
+
+  useEffect(() => {
+    if (isComplete) return
+    const interval = setInterval(() => {
+      setMessageIndex((i) => Math.min(i + 1, BOOT_MESSAGES.length - 2))
+    }, 2200)
+    return () => clearInterval(interval)
+  }, [isComplete])
+
+  useEffect(() => {
+    if (isComplete) return
+    const start = performance.now()
+    const animate = () => {
+      const elapsed = performance.now() - start
+      const target = Math.min(92, (elapsed / 12000) * 92)
+      setProgress(target)
+      if (target < 92) rafRef.current = requestAnimationFrame(animate)
+    }
+    rafRef.current = requestAnimationFrame(animate)
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [isComplete])
+
+  return (
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center">
+      <div className="w-full max-w-md px-8">
+        <p
+          className="font-mono text-sm text-cyan-400 mb-6 tracking-widest min-h-[2.5rem]"
+          style={{ textShadow: '0 0 12px rgba(34, 211, 238, 0.6)' }}
+        >
+          {BOOT_MESSAGES[messageIndex]}
+        </p>
+        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-300 ease-out"
+            style={{
+              width: `${progress}%`,
+              background: 'linear-gradient(90deg, #0891b2 0%, #22d3ee 50%, #67e8f9 100%)',
+              boxShadow: '0 0 20px rgba(34, 211, 238, 0.8), 0 0 40px rgba(34, 211, 238, 0.4)',
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('lens')
   const [loadedFileName, setLoadedFileName] = useState<string | null>(null)
@@ -87,6 +164,7 @@ function App() {
     const loaded = loadLastDesign()
     return loaded ?? { ...DEFAULT_SYSTEM_STATE, ...computePerformance(DEFAULT_SYSTEM_STATE) }
   })
+  const [showBootOverlay, setShowBootOverlay] = useState(() => isPyodideEnabled())
 
   useEffect(() => {
     setSensitivityBySurface(null)
@@ -125,6 +203,9 @@ function App() {
 
   return (
     <div className="min-h-screen bg-midnight flex flex-col">
+      {showBootOverlay && (
+        <NeuralLinkBootSequence onReady={() => setShowBootOverlay(false)} />
+      )}
       <NavBar activeTab={activeTab} onTabChange={setActiveTab} loadedFileName={loadedFileName} />
       <div className="flex flex-1 overflow-hidden">
         <main className="flex-1 overflow-auto p-4">
