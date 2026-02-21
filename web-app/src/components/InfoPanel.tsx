@@ -136,6 +136,18 @@ const GLOSSARY_ITEMS: {
   { title: 'RMS Radius', metricId: 'rms', explanation: "Root mean square of ray distances from the centroid—effective 'blur' size.", formula: 'R_rms = √((1/n) Σ (y_i − ȳ)²)' },
   { title: 'Beam Width', metricId: 'beamWidth', explanation: 'Full aperture: total vertical spread of the ray bundle at the current Z-plane.', formula: 'W = max(yᵢ) − min(yᵢ)' },
   { title: 'Chief Ray Angle (CRA)', metricId: 'cra', explanation: 'Angle of the ray through the aperture stop center relative to the optical axis.', formula: 'CRA = arctan(dy/dz)  [°]' },
+  {
+    title: 'Spot Size (w₀) at focus',
+    metricId: 'spotSize',
+    explanation: 'Beam waist radius (1/e² radius) at the best focus. Derived from the on-axis RMS of ray intercepts.',
+    formula: 'w₀ = 2 × R_rms  (1/e² radius = 2σ)',
+  },
+  {
+    title: 'Rayleigh (z_R) at focus',
+    metricId: 'rayleigh',
+    explanation: 'Distance from the waist where the beam cross-section doubles. Uses M² from System Properties.',
+    formula: 'z_R = π × w₀² / (λ × M²)  [mm]',
+  },
 ]
 
 function createLowDispersionPreset(): SystemState {
