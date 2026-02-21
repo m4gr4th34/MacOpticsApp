@@ -99,8 +99,8 @@ def surface_profile(radius, semi_dia, n_pts=31):
 
 
 def refract(v_in, normal, n1, n2):
-    """Vector form of Snell's law: v_refr = η·v_inc + (η·cos(θi) - sqrt(1 - η²(1-cos²(θi))))·N.
-    η = n1/n2 (incident/refracted). Enter glass: η≈0.67. Exit glass: η=1.5. N = unit normal."""
+    """Vector form of Snell's law: v_refr = η·v_inc + (η·cos(θi) - cos(θt))·N.
+    η = n1/n2. N = unit normal into incident medium."""
     n1, n2 = float(n1), float(n2)
     if n2 < 1e-9:
         return (0, 0, True, {"n1": n1, "n2": n2, "resultant": [0, 0], "msg": "n2 near zero"})
@@ -112,6 +112,8 @@ def refract(v_in, normal, n1, n2):
     if sin2_t < 0:
         return (0, 0, True, {"n1": n1, "n2": n2, "resultant": [0, 0], "msg": "TIR", "radicand": float(sin2_t)})
     cos_theta_t = np.sqrt(sin2_t)
+    # Standard: t = μ·i + (cos_θt - μ·cos_θi)·N_std. We pass N into incident medium (N = -N_std).
+    # So coeff = μ·cos_θi - cos_θt.
     coeff = eta * cos_theta_i - cos_theta_t
     out_dz = eta * vx + coeff * nx
     out_dy = eta * vy + coeff * ny
@@ -254,15 +256,19 @@ def trace_ray(ray_z, ray_y, ray_dz, ray_dy, surfaces, wvl_nm, cumulative_z, z_ta
             raise ValueError(
                 f"MATCH AUDIT FAIL | UI Surface {i+1} | Pos: {z_vertex:.2f}mm | Material: {mat_name} | n_after: {n_after:.4f} — Air must have n=1.0"
             )
+        v_in = (ray_dz, ray_dy)
+        ray_dz, ray_dy, tir, diag = refract(v_in, normal, n_before, n_after)
         if log_refraction and len(_refraction_log) < 50:
             ui_surf = i + 1
             _refraction_log.append({
                 "surf": i, "ui_surf": ui_surf, "z_vertex": float(z_vertex),
                 "thickness_to_next": t_to_next, "n1": float(n_before), "n2": float(n_after),
                 "eta": eta, "mat_name": mat_name,
+                "hit_z": float(hit_z), "hit_y": float(hit_y),
+                "radius": float(radius), "center_z": float(z_vertex + radius) if radius else 0,
+                "v_in": [float(v_in[0]), float(v_in[1])],
+                "v_out": [float(ray_dz), float(ray_dy)],
             })
-        v_in = (ray_dz, ray_dy)
-        ray_dz, ray_dy, tir, diag = refract(v_in, normal, n_before, n_after)
         if tir:
             _log_termination(TERM_TIR, i, hit_z, hit_y, diag, v_in, z_vertex,
                             n1=diag.get("n1"), n2=diag.get("n2"), resultant=diag.get("resultant"), wvl_nm=wvl_nm,
@@ -335,6 +341,21 @@ def run_trace(optical_stack):
     z_cur = cumulative_z[-1] + float(surfaces[-1].get("thickness", 0) or 0)
     z_target = max(z_cur + 100.0, Z_TARGET)
 
+    # Paraxial EFL from lens maker's formula (thin-lens approx): 1/f = (n-1)(1/R1 - 1/R2).
+    # Sign convention: R>0 = center right of vertex, R<0 = center left of vertex (optical design).
+    def _paraxial_efl_mm():
+        if len(surfaces) < 2:
+            return None
+        r1 = float(surfaces[0].get("radius", 0) or 0)
+        r2 = float(surfaces[1].get("radius", 0) or 0)
+        if abs(r1) < 1e-6 or abs(r2) < 1e-6:
+            return None
+        n = get_n(surfaces[0], wavelengths[0])
+        inv_f = (n - 1) * (1 / r1 - 1 / r2)
+        return 1 / inv_f if abs(inv_f) > 1e-9 else None
+
+    paraxial_efl = _paraxial_efl_mm()
+
     # Ray fan: N rays per field angle (N = numRays from slider). Total = len(field_angles) * num_rays.
     num_rays = max(2, int(num_rays))
     rays = []
@@ -373,16 +394,32 @@ def run_trace(optical_stack):
         }
 
     # Metrics sweep: uses the EXACT same ray paths as visual rays (interpolation only, no separate refraction).
-    # z from 0 (first surface) to totalLength*1.5. bestFocusZ = z where RMS is minimum (White Diamond).
-    # Expandable: if minimum RMS is at the sweep edge, extend and re-search until true local minimum.
-    z_sweep_min = 0.0
+    # z from RAY_START_Z (rays exist) to totalLength*1.5. HUD must show metrics at cursor Z; if sweep
+    # starts at 0, cursor at z<0 gets sweep[0] (wrong). Include ray extent so metrics match cursor Z.
+    z_sweep_min = RAY_START_Z
     z_sweep_max = z_cur * 1.5
 
-    def _compute_sweep(z_lo, z_hi, n_pts=120):
+    def _chief_slope_at_z(ray, z):
+        """Slope dy/dz of ray at z, or None if ray has no segment containing z."""
+        if not ray or len(ray) < 2:
+            return None
+        for k in range(len(ray) - 1):
+            za, zb = ray[k][0], ray[k + 1][0]
+            if (za <= z <= zb) or (zb <= z <= za):
+                dz_seg = ray[k + 1][0] - ray[k][0]
+                return (ray[k + 1][1] - ray[k][1]) / dz_seg if abs(dz_seg) > 1e-12 else 0.0
+        return None
+
+    def _compute_sweep(z_lo, z_hi, n_pts=120, ray_subset=None):
+        """ray_subset: optional list of ray indices to include. If None, use all rays."""
+        use_rays = [rays[i] for i in (ray_subset if ray_subset is not None else range(len(rays)))]
+        # Chief ray = ray through pupil center (smallest |y| at first point)
+        chief_idx = min(range(len(use_rays)), key=lambda i: abs(use_rays[i][0][1]) if use_rays[i] else float("inf"))
+        chief_ray = use_rays[chief_idx] if chief_idx < len(use_rays) else None
         out = []
         for z in np.linspace(z_lo, z_hi, n_pts):
             y_vals = []
-            for ray in rays:
+            for ray in use_rays:
                 for k in range(len(ray) - 1):
                     if ray[k][0] <= z <= ray[k + 1][0] or ray[k + 1][0] <= z <= ray[k][0]:
                         t = (z - ray[k][0]) / (ray[k + 1][0] - ray[k][0]) if ray[k + 1][0] != ray[k][0] else 0
@@ -393,32 +430,47 @@ def run_trace(optical_stack):
                 y_arr = np.array(y_vals)
                 rms = float(np.sqrt(np.mean(y_arr**2) - np.mean(y_arr) ** 2)) if len(y_arr) > 0 else 0
                 rms = max(0, rms)
+                chief_slope = _chief_slope_at_z(chief_ray, z) if chief_ray else None
+                cra = float(np.degrees(np.arctan(chief_slope))) if chief_slope is not None else 0.0
                 out.append({"z": float(z), "rmsRadius": rms, "beamWidth": float(np.max(y_arr) - np.min(y_arr)),
-                           "chiefRayAngle": 0, "yCentroid": float(np.mean(y_arr)), "numRays": len(y_vals)})
+                           "chiefRayAngle": cra, "yCentroid": float(np.mean(y_arr)), "numRays": len(y_vals)})
             else:
                 out.append({"z": float(z), "rmsRadius": None, "beamWidth": None, "chiefRayAngle": None, "yCentroid": None, "numRays": 0})
         return out
 
-    metrics_sweep = _compute_sweep(z_sweep_min, z_sweep_max)
-    valid_sweep = [m for m in metrics_sweep if m.get("rmsRadius") is not None and m["rmsRadius"] >= 0]
+    metrics_sweep = _compute_sweep(z_sweep_min, z_sweep_max, n_pts=200)
+    # On-axis rays only for best focus: focus_mode On-Axis must not include off-axis field rays.
+    on_axis_indices = [i for i in range(len(rays)) if ray_field_indices[i] == 0]
+    focus_sweep = _compute_sweep(z_sweep_min, z_sweep_max, n_pts=200, ray_subset=on_axis_indices) if on_axis_indices else metrics_sweep
+    valid_focus_sweep = [m for m in focus_sweep if m.get("rmsRadius") is not None and m["rmsRadius"] >= 0]
 
-    # Best Focus: z where RMS is minimized. Expand sweep if min at last index (real focus further out).
+    # Best Focus: z where RMS is minimized. Use ON-AXIS rays only (exclude off-axis field rays).
+    # REFERENCE PLANE FIX: cap at z_cur + 100 mm to exclude far spread.
+    Z_FOCUS_CAP_MM = 100.0
+    z_search_max = z_cur + Z_FOCUS_CAP_MM
+
+    def _in_focus_region(m):
+        return m["z"] <= z_search_max
+
     best_focus_z = z_cur
     rms_at_focus = 0.0
     for _ in range(4):  # Max 4 extensions
-        if valid_sweep:
-            best_pt = min(valid_sweep, key=lambda m: m["rmsRadius"])
-            best_idx = next((i for i, m in enumerate(metrics_sweep) if m.get("rmsRadius") == best_pt["rmsRadius"] and m["z"] == best_pt["z"]), -1)
+        search_sweep = [m for m in valid_focus_sweep if _in_focus_region(m)] or valid_focus_sweep
+        if search_sweep:
+            best_pt = min(search_sweep, key=lambda m: m["rmsRadius"])
+            best_idx = next((i for i, m in enumerate(focus_sweep) if m.get("rmsRadius") == best_pt["rmsRadius"] and m["z"] == best_pt["z"]), -1)
             best_focus_z = best_pt["z"]
             rms_at_focus = best_pt["rmsRadius"]
-            if best_idx < 0 or (best_idx < len(metrics_sweep) - 2 and best_idx > 1):
+            if best_idx < 0 or (best_idx < len(focus_sweep) - 2 and best_idx > 1):
                 break
-            if best_idx >= len(metrics_sweep) - 2:
+            if best_idx >= len(focus_sweep) - 2:
                 z_sweep_min = z_sweep_max
                 z_sweep_max = z_sweep_max * 1.5
-                ext = _compute_sweep(z_sweep_min, z_sweep_max, n_pts=80)
-                metrics_sweep = sorted(metrics_sweep + ext, key=lambda m: m["z"])
-                valid_sweep = [m for m in metrics_sweep if m.get("rmsRadius") is not None and m["rmsRadius"] >= 0]
+                ext_focus = _compute_sweep(z_sweep_min, z_sweep_max, n_pts=80, ray_subset=on_axis_indices)
+                ext_full = _compute_sweep(z_sweep_min, z_sweep_max, n_pts=80)
+                focus_sweep = sorted(focus_sweep + ext_focus, key=lambda m: m["z"])
+                metrics_sweep = sorted(metrics_sweep + ext_full, key=lambda m: m["z"])
+                valid_focus_sweep = [m for m in focus_sweep if m.get("rmsRadius") is not None and m["rmsRadius"] >= 0]
             else:
                 break
         else:
@@ -450,6 +502,8 @@ def run_trace(optical_stack):
             n2 = e.get("n2", 0)
             print(f"MATCH AUDIT | UI Surface {ui} | Pos: {z:.2f}mm | Material: {mat} | n_after: {n2:.4f}")
         print(f"bestFocusZ={best_focus_z:.2f} mm (Diamond = visual crossing)")
+    if paraxial_efl is not None:
+        print(f"Paraxial EFL (thin-lens): {paraxial_efl:.2f} mm | bestFocusZ={best_focus_z:.2f} mm")
 
     return {
         "rays": rays,
@@ -458,6 +512,9 @@ def run_trace(optical_stack):
         "surfaces": surface_profiles,
         "focusZ": focus_z,
         "bestFocusZ": best_focus_z,
+        "paraxialEflMm": float(paraxial_efl) if paraxial_efl is not None else None,
+        "firstLensR1": float(surfaces[0].get("radius", 0) or 0) if surfaces else None,
+        "firstLensR2": float(surfaces[1].get("radius", 0) or 0) if len(surfaces) > 1 else None,
         "zOrigin": z_origin,
         "terminationLog": _termination_log,
         "refractionLog": _refraction_log,
@@ -466,7 +523,8 @@ def run_trace(optical_stack):
             "totalLength": total_length,
             "fNumber": f_num,
         },
-        "metricsSweep": metrics_sweep,
+        # HUD and RMS vs Z graph: use on-axis sweep when On-Axis so RMS matches best focus.
+        "metricsSweep": focus_sweep if (focus_mode == "On-Axis" and on_axis_indices) else metrics_sweep,
         "gaussianBeam": {
             "beamEnvelope": [],
             "spotSizeAtFocus": 2.0 * rms_at_focus if rms_at_focus > 1e-9 else 0.09,

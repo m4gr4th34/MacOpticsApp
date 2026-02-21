@@ -1929,17 +1929,17 @@ export function OpticalViewport({
                     </span>
                   </div>
                 )}
-                {traceResult?.gaussianBeam && (
+                {traceResult?.gaussianBeam && bestFocusZ != null && (
                   <>
                     <HudRow
-                      label="Spot Size (w₀):"
+                      label="Spot Size (w₀) at focus:"
                       value={`${(traceResult.gaussianBeam.spotSizeAtFocus * 1000).toFixed(2)} µm`}
                       metricId="spotSize"
                       highlightedMetric={highlightedMetric}
                       labelColor="#22D3EE"
                     />
                     <HudRow
-                      label="Rayleigh Range (z_R):"
+                      label="Rayleigh (z_R) at focus:"
                       value={`${traceResult.gaussianBeam.rayleighRange.toFixed(2)} mm`}
                       metricId="rayleigh"
                       highlightedMetric={highlightedMetric}
