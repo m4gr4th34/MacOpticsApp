@@ -29,7 +29,8 @@ T_MIN = 1e-4
 RAY_START_Z = -10.0
 
 # Target z for final air propagation (extend rays past last surface to focus region).
-Z_TARGET = 500.0
+# Keep modest to avoid drawing rays far beyond the focal plane (backend extends only to focus).
+Z_TARGET = 150.0
 
 # Safety: max surfaces per ray to prevent infinite loops.
 MAX_SURFACES = 100
@@ -404,10 +405,8 @@ def run_trace(optical_stack):
             p[0] += cumulative_z[i]
         surface_profiles.append(pts)
     z_cur = cumulative_z[-1] + float(surfaces[-1].get("thickness", 0) or 0)
-    z_target = max(z_cur + 100.0, Z_TARGET)
 
     # Paraxial EFL from lens maker's formula (thin-lens approx): 1/f = (n-1)(1/R1 - 1/R2).
-    # Sign convention: R>0 = center right of vertex, R<0 = center left of vertex (optical design).
     def _paraxial_efl_mm():
         if len(surfaces) < 2:
             return None
@@ -420,6 +419,9 @@ def run_trace(optical_stack):
         return 1 / inv_f if abs(inv_f) > 1e-9 else None
 
     paraxial_efl = _paraxial_efl_mm()
+    # Extend rays past last surface: ~0.6× EFL or 50–150 mm, to show focus without excessive length.
+    ext = max(50.0, min((paraxial_efl or 80) * 0.6, Z_TARGET))
+    z_target = z_cur + ext
 
     # Ray fan: N rays per field angle (N = numRays from slider). Total = len(field_angles) * num_rays.
     num_rays = max(2, int(num_rays))
@@ -617,7 +619,7 @@ def run_chromatic_shift(optical_stack, wavelength_min_nm=400.0, wavelength_max_n
         cumulative_z.append(cumulative_z[-1] + t)
     last_vertex_z = cumulative_z[-1]
     z_cur = last_vertex_z + float(surfaces[-1].get("thickness", 0) or 0)
-    z_target = max(z_cur + 100.0, Z_TARGET)
+    z_target = z_cur + 100.0
     z_sweep_min = RAY_START_Z
     z_sweep_max = z_cur * 1.5
 

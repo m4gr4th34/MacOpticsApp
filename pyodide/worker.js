@@ -13,7 +13,7 @@ async function loadTraceScript() {
   // Worker location is the script URL; derive trace.py from same directory.
   const scriptUrl = self.location.href;
   const base = scriptUrl.replace(/[^/]*$/, '');
-  const traceUrl = base + 'trace.py?v=17';
+  const traceUrl = base + 'trace.py?v=18';
   try {
     const res = await fetch(traceUrl, { credentials: 'omit', cache: 'no-store' });
     if (res.ok) return await res.text();
